@@ -1,0 +1,146 @@
+syntax = "proto3";
+
+package asb.v1;
+
+option go_package = "github.com/haasonsaas/asb/proto/asb/v1;asbv1";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+service BrokerService {
+  rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
+  rpc RequestGrant(RequestGrantRequest) returns (RequestGrantResponse);
+  rpc ApproveGrant(ApproveGrantRequest) returns (RequestGrantResponse);
+  rpc DenyGrant(DenyGrantRequest) returns (DenyGrantResponse);
+  rpc RevokeGrant(RevokeGrantRequest) returns (RevokeGrantResponse);
+  rpc RevokeSession(RevokeSessionRequest) returns (RevokeSessionResponse);
+  rpc ExecuteGitHubProxy(ExecuteGitHubProxyRequest) returns (ExecuteGitHubProxyResponse);
+  rpc RegisterBrowserRelay(RegisterBrowserRelayRequest) returns (RegisterBrowserRelayResponse);
+  rpc UnwrapArtifact(UnwrapArtifactRequest) returns (UnwrapArtifactResponse);
+}
+
+message Attestation {
+  string kind = 1;
+  string token = 2;
+}
+
+message Delivery {
+  string kind = 1;
+  string handle = 2;
+  string token = 3;
+  string artifact_id = 4;
+}
+
+message BrowserFillField {
+  string name = 1;
+  string selector = 2;
+  string value = 3;
+}
+
+message CreateSessionRequest {
+  string tenant_id = 1;
+  string agent_id = 2;
+  string run_id = 3;
+  repeated string tool_context = 4;
+  Attestation attestation = 5;
+  string delegation_assertion = 6;
+}
+
+message CreateSessionResponse {
+  string session_id = 1;
+  string session_token = 2;
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+message RequestGrantRequest {
+  string session_token = 1;
+  string tool = 2;
+  string capability = 3;
+  string resource_ref = 4;
+  string delivery_mode = 5;
+  int64 ttl_seconds = 6;
+  string reason = 7;
+}
+
+message RequestGrantResponse {
+  string grant_id = 1;
+  string state = 2;
+  string approval_id = 3;
+  Delivery delivery = 4;
+  google.protobuf.Timestamp expires_at = 5;
+}
+
+message ApproveGrantRequest {
+  string approval_id = 1;
+  string approver = 2;
+  string comment = 3;
+}
+
+message DenyGrantRequest {
+  string approval_id = 1;
+  string approver = 2;
+  string comment = 3;
+}
+
+message DenyGrantResponse {
+  string state = 1;
+}
+
+message RevokeGrantRequest {
+  string grant_id = 1;
+  string reason = 2;
+}
+
+message RevokeGrantResponse {
+  string state = 1;
+}
+
+message RevokeSessionRequest {
+  string session_id = 1;
+  string reason = 2;
+}
+
+message RevokeSessionResponse {
+  string state = 1;
+}
+
+message ExecuteGitHubProxyRequest {
+  string proxy_handle = 1;
+  string operation = 2;
+  google.protobuf.Struct params = 3;
+}
+
+message ExecuteGitHubProxyResponse {
+  bytes payload = 1;
+  string content_type = 2;
+}
+
+message RegisterBrowserRelayRequest {
+  string session_token = 1;
+  string key_id = 2;
+  string public_key = 3;
+  string origin = 4;
+  string tab_id = 5;
+  map<string, string> selectors = 6;
+}
+
+message RegisterBrowserRelayResponse {
+  string session_id = 1;
+  string key_id = 2;
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+message UnwrapArtifactRequest {
+  string session_token = 1;
+  string artifact_id = 2;
+  string key_id = 3;
+  string origin = 4;
+  string tab_id = 5;
+}
+
+message UnwrapArtifactResponse {
+  string artifact_id = 1;
+  string origin = 2;
+  bool auto_submit = 3;
+  repeated BrowserFillField fields = 4;
+}
