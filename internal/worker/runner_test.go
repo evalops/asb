@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/haasonsaas/asb/internal/app"
-	"github.com/haasonsaas/asb/internal/worker"
+	"github.com/evalops/asb/internal/app"
+	"github.com/evalops/asb/internal/worker"
 )
 
 func TestRunner_RunOnce(t *testing.T) {

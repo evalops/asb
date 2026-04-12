@@ -3,7 +3,7 @@ package proxy
 import (
 	"sync"
 
-	"github.com/haasonsaas/asb/internal/core"
+	"github.com/evalops/asb/internal/core"
 )
 
 type BudgetTracker struct {

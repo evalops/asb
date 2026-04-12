@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/haasonsaas/asb/internal/api/httpapi"
-	"github.com/haasonsaas/asb/internal/core"
+	"github.com/evalops/asb/internal/api/httpapi"
+	"github.com/evalops/asb/internal/core"
 )
 
 func TestServer_CreateSession(t *testing.T) {

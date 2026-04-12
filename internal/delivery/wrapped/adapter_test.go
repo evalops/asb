@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/haasonsaas/asb/internal/core"
-	"github.com/haasonsaas/asb/internal/delivery/wrapped"
+	"github.com/evalops/asb/internal/core"
+	"github.com/evalops/asb/internal/delivery/wrapped"
 )
 
 func TestAdapter_DeliverReturnsArtifactReference(t *testing.T) {

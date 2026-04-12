@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/haasonsaas/asb/internal/app"
-	"github.com/haasonsaas/asb/internal/audit/memory"
-	"github.com/haasonsaas/asb/internal/core"
-	memstore "github.com/haasonsaas/asb/internal/store/memory"
+	"github.com/evalops/asb/internal/app"
+	"github.com/evalops/asb/internal/audit/memory"
+	"github.com/evalops/asb/internal/core"
+	memstore "github.com/evalops/asb/internal/store/memory"
 )
 
 func TestService_RunCleanupOnceExpiresSessionsAndArtifacts(t *testing.T) {

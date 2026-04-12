@@ -6,8 +6,8 @@ import (
 	"time"
 
 	miniredis "github.com/alicebob/miniredis/v2"
-	"github.com/haasonsaas/asb/internal/core"
-	redisstore "github.com/haasonsaas/asb/internal/store/redis"
+	"github.com/evalops/asb/internal/core"
+	redisstore "github.com/evalops/asb/internal/store/redis"
 	goredis "github.com/redis/go-redis/v9"
 )
 

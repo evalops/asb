@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/haasonsaas/asb/internal/migrate"
+	"github.com/evalops/asb/internal/migrate"
 	pgxmock "github.com/pashagolub/pgxmock/v4"
 )
 

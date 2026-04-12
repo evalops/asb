@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/haasonsaas/asb/internal/core"
-	proxybudget "github.com/haasonsaas/asb/internal/delivery/proxy"
+	"github.com/evalops/asb/internal/core"
+	proxybudget "github.com/evalops/asb/internal/delivery/proxy"
 )
 
 type RuntimeStore struct {

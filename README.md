@@ -258,7 +258,8 @@ Flags: `-interval` (default 30s), `-limit` (default 100 per pass), `-once` (sing
 ## Local development
 
 ```bash
-make proto         # regenerate protobuf/ConnectRPC stubs
+make proto         # lint and regenerate protobuf/ConnectRPC stubs with buf
+make proto-check   # verify generated protobuf/ConnectRPC stubs are current
 make fmt           # format Go source
 make vet           # go vet
 make test          # run all tests

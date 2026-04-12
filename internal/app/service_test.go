@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/haasonsaas/asb/internal/app"
-	"github.com/haasonsaas/asb/internal/audit/memory"
-	"github.com/haasonsaas/asb/internal/authz/policy"
-	"github.com/haasonsaas/asb/internal/authz/toolregistry"
-	"github.com/haasonsaas/asb/internal/core"
-	"github.com/haasonsaas/asb/internal/crypto/sessionjwt"
-	memstore "github.com/haasonsaas/asb/internal/store/memory"
+	"github.com/evalops/asb/internal/app"
+	"github.com/evalops/asb/internal/audit/memory"
+	"github.com/evalops/asb/internal/authz/policy"
+	"github.com/evalops/asb/internal/authz/toolregistry"
+	"github.com/evalops/asb/internal/core"
+	"github.com/evalops/asb/internal/crypto/sessionjwt"
+	memstore "github.com/evalops/asb/internal/store/memory"
 )
 
 func TestService_CreateSessionAndIssueProxyGrant(t *testing.T) {

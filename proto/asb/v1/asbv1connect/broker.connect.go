@@ -8,7 +8,7 @@ import (
 	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	v1 "github.com/haasonsaas/asb/proto/asb/v1"
+	v1 "github.com/evalops/asb/proto/asb/v1"
 	http "net/http"
 	strings "strings"
 )

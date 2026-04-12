@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/haasonsaas/asb/internal/bootstrap"
-	"github.com/haasonsaas/asb/internal/worker"
+	"github.com/evalops/asb/internal/bootstrap"
+	"github.com/evalops/asb/internal/worker"
 )
 
 func main() {

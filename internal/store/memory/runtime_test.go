@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/haasonsaas/asb/internal/core"
-	memstore "github.com/haasonsaas/asb/internal/store/memory"
+	"github.com/evalops/asb/internal/core"
+	memstore "github.com/evalops/asb/internal/store/memory"
 )
 
 func TestRuntimeStore_ProxyBudgetsAndRelaySessions(t *testing.T) {

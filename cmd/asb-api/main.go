@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/haasonsaas/asb/internal/api/connectapi"
-	"github.com/haasonsaas/asb/internal/api/httpapi"
-	"github.com/haasonsaas/asb/internal/bootstrap"
+	"github.com/evalops/asb/internal/api/connectapi"
+	"github.com/evalops/asb/internal/api/httpapi"
+	"github.com/evalops/asb/internal/bootstrap"
 )
 
 func main() {

@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/haasonsaas/asb/internal/connectors/github"
-	"github.com/haasonsaas/asb/internal/core"
+	"github.com/evalops/asb/internal/connectors/github"
+	"github.com/evalops/asb/internal/core"
 )
 
 func TestHTTPExecutor_ExecutePullRequestFiles(t *testing.T) {

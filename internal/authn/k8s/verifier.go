@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/haasonsaas/asb/internal/core"
+	"github.com/evalops/asb/internal/core"
 )
 
 type Keyfunc func(ctx context.Context, token *jwt.Token) (any, error)

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/haasonsaas/asb/internal/connectors/browser"
-	"github.com/haasonsaas/asb/internal/core"
+	"github.com/evalops/asb/internal/connectors/browser"
+	"github.com/evalops/asb/internal/core"
 )
 
 func TestConnector_ValidateAndIssueBrowserCredential(t *testing.T) {
