@@ -72,7 +72,7 @@ func (s *server) RequestGrant(ctx context.Context, req *connect.Request[asbv1.Re
 	return connect.NewResponse(toProtoGrantResponse(resp)), nil
 }
 
-func (s *server) ApproveGrant(ctx context.Context, req *connect.Request[asbv1.ApproveGrantRequest]) (*connect.Response[asbv1.RequestGrantResponse], error) {
+func (s *server) ApproveGrant(ctx context.Context, req *connect.Request[asbv1.ApproveGrantRequest]) (*connect.Response[asbv1.ApproveGrantResponse], error) {
 	resp, err := s.service.ApproveGrant(ctx, &core.ApproveGrantRequest{
 		ApprovalID: req.Msg.GetApprovalId(),
 		Approver:   req.Msg.GetApprover(),
@@ -81,7 +81,7 @@ func (s *server) ApproveGrant(ctx context.Context, req *connect.Request[asbv1.Ap
 	if err != nil {
 		return nil, connectError(err)
 	}
-	return connect.NewResponse(toProtoGrantResponse(resp)), nil
+	return connect.NewResponse(toProtoApproveGrantResponse(resp)), nil
 }
 
 func (s *server) DenyGrant(ctx context.Context, req *connect.Request[asbv1.DenyGrantRequest]) (*connect.Response[asbv1.DenyGrantResponse], error) {
@@ -180,21 +180,34 @@ func (s *server) UnwrapArtifact(ctx context.Context, req *connect.Request[asbv1.
 	}), nil
 }
 
-func toProtoGrantResponse(resp *core.RequestGrantResponse) *asbv1.RequestGrantResponse {
-	var delivery *asbv1.Delivery
-	if resp.Delivery != nil {
-		delivery = &asbv1.Delivery{
-			Kind:       string(resp.Delivery.Kind),
-			Handle:     resp.Delivery.Handle,
-			Token:      resp.Delivery.Token,
-			ArtifactId: resp.Delivery.ArtifactID,
-		}
+func toProtoDelivery(d *core.Delivery) *asbv1.Delivery {
+	if d == nil {
+		return nil
 	}
+	return &asbv1.Delivery{
+		Kind:       string(d.Kind),
+		Handle:     d.Handle,
+		Token:      d.Token,
+		ArtifactId: d.ArtifactID,
+	}
+}
+
+func toProtoGrantResponse(resp *core.RequestGrantResponse) *asbv1.RequestGrantResponse {
 	return &asbv1.RequestGrantResponse{
 		GrantId:    resp.GrantID,
 		State:      string(resp.State),
 		ApprovalId: resp.ApprovalID,
-		Delivery:   delivery,
+		Delivery:   toProtoDelivery(resp.Delivery),
+		ExpiresAt:  timestamppb.New(resp.ExpiresAt),
+	}
+}
+
+func toProtoApproveGrantResponse(resp *core.RequestGrantResponse) *asbv1.ApproveGrantResponse {
+	return &asbv1.ApproveGrantResponse{
+		GrantId:    resp.GrantID,
+		State:      string(resp.State),
+		ApprovalId: resp.ApprovalID,
+		Delivery:   toProtoDelivery(resp.Delivery),
 		ExpiresAt:  timestamppb.New(resp.ExpiresAt),
 	}
 }

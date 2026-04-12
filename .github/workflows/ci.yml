@@ -11,7 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Go
         uses: evalops/service-runtime/.github/actions/setup-go-service@ca09da8302203b96582332dbcababe9f2d906d10
@@ -19,18 +21,30 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Setup Protoc
-        uses: arduino/setup-protoc@v3
+      - name: Setup Buf
+        uses: bufbuild/buf-action@fd21066df7214747548607aaa45548ba2b9bc1ff # v1
         with:
-          version: "33.4"
+          setup_only: true
 
-      - name: Install Protobuf Plugins
+      - name: Install protoc plugins
         run: |
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-          go install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+          go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.19.1
 
       - name: Format
         run: make fmt
+
+      - name: Buf lint
+        run: buf lint
+
+      - name: Buf breaking change detection
+        if: github.event_name == 'pull_request'
+        run: |
+          if git show origin/main:buf.yaml >/dev/null 2>&1; then
+            buf breaking --against '.git#branch=main'
+          else
+            echo "Skipping: no buf.yaml on main yet"
+          fi
 
       - name: Regenerate Protos
         run: make proto
