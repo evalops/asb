@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Go
         uses: evalops/service-runtime/.github/actions/setup-go-service@ca09da8302203b96582332dbcababe9f2d906d10
@@ -37,10 +39,15 @@ jobs:
 
       - name: Buf breaking change detection
         if: github.event_name == 'pull_request'
-        run: buf breaking --against '.git#branch=main'
+        run: |
+          if git show origin/main:buf.yaml >/dev/null 2>&1; then
+            buf breaking --against '.git#branch=main'
+          else
+            echo "Skipping: no buf.yaml on main yet"
+          fi
 
       - name: Regenerate Protos
-        run: buf generate
+        run: make proto
 
       - name: Verify Clean Working Tree
         run: git diff --exit-code
