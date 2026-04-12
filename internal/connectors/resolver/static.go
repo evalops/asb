@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/haasonsaas/asb/internal/core"
+	"github.com/evalops/asb/internal/core"
 )
 
 type StaticResolver struct {

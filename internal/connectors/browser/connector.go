@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/haasonsaas/asb/internal/core"
+	"github.com/evalops/asb/internal/core"
 )
 
 type Credential struct {

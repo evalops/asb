@@ -1,6 +1,6 @@
 GO ?= go
 
-.PHONY: fmt test vet proto migrate run-api run-worker
+.PHONY: fmt test vet proto proto-check migrate run-api run-worker
 
 fmt:
 	$(GO) fmt ./...
@@ -12,7 +12,10 @@ vet:
 	$(GO) vet ./...
 
 proto:
-	buf generate
+	bash scripts/sync-proto.sh
+
+proto-check:
+	bash scripts/sync-proto.sh --check
 
 migrate:
 	$(GO) run ./cmd/asb-migrate

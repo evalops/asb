@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/haasonsaas/asb/internal/connectors/vaultdb"
-	"github.com/haasonsaas/asb/internal/core"
+	"github.com/evalops/asb/internal/connectors/vaultdb"
+	"github.com/evalops/asb/internal/core"
 )
 
 func TestConnector_IssueAndRevokeDynamicCredentials(t *testing.T) {

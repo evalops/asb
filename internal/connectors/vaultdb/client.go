@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/haasonsaas/asb/internal/core"
+	"github.com/evalops/asb/internal/core"
 )
 
 type HTTPClientConfig struct {

@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/haasonsaas/asb/internal/core"
-	"github.com/haasonsaas/asb/internal/delivery/proxy"
+	"github.com/evalops/asb/internal/core"
+	"github.com/evalops/asb/internal/delivery/proxy"
 )
 
 func TestAdapter_DeliverReturnsProxyHandle(t *testing.T) {

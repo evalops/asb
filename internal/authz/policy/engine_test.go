@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/haasonsaas/asb/internal/authz/policy"
-	"github.com/haasonsaas/asb/internal/core"
+	"github.com/evalops/asb/internal/authz/policy"
+	"github.com/evalops/asb/internal/core"
 )
 
 func TestEngine_EvaluateAllowsAndClampsTTL(t *testing.T) {

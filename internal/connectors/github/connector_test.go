@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/haasonsaas/asb/internal/connectors/github"
-	"github.com/haasonsaas/asb/internal/core"
+	"github.com/evalops/asb/internal/connectors/github"
+	"github.com/evalops/asb/internal/core"
 )
 
 func TestConnector_ValidateResource(t *testing.T) {

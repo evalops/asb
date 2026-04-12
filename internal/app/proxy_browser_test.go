@@ -5,14 +5,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/haasonsaas/asb/internal/app"
-	"github.com/haasonsaas/asb/internal/audit/memory"
-	"github.com/haasonsaas/asb/internal/authz/policy"
-	"github.com/haasonsaas/asb/internal/authz/toolregistry"
-	"github.com/haasonsaas/asb/internal/core"
-	proxydelivery "github.com/haasonsaas/asb/internal/delivery/proxy"
-	wrappeddelivery "github.com/haasonsaas/asb/internal/delivery/wrapped"
-	memstore "github.com/haasonsaas/asb/internal/store/memory"
+	"github.com/evalops/asb/internal/app"
+	"github.com/evalops/asb/internal/audit/memory"
+	"github.com/evalops/asb/internal/authz/policy"
+	"github.com/evalops/asb/internal/authz/toolregistry"
+	"github.com/evalops/asb/internal/core"
+	proxydelivery "github.com/evalops/asb/internal/delivery/proxy"
+	wrappeddelivery "github.com/evalops/asb/internal/delivery/wrapped"
+	memstore "github.com/evalops/asb/internal/store/memory"
 )
 
 func TestService_ExecuteGitHubProxy(t *testing.T) {

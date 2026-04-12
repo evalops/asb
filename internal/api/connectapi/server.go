@@ -7,9 +7,9 @@ import (
 	"time"
 
 	connect "connectrpc.com/connect"
-	"github.com/haasonsaas/asb/internal/core"
-	asbv1 "github.com/haasonsaas/asb/proto/asb/v1"
-	"github.com/haasonsaas/asb/proto/asb/v1/asbv1connect"
+	"github.com/evalops/asb/internal/core"
+	asbv1 "github.com/evalops/asb/proto/asb/v1"
+	"github.com/evalops/asb/proto/asb/v1/asbv1connect"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )

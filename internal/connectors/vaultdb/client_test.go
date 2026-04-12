@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/haasonsaas/asb/internal/connectors/vaultdb"
+	"github.com/evalops/asb/internal/connectors/vaultdb"
 )
 
 func TestHTTPClient_GenerateCredentialsAndRevokeLease(t *testing.T) {

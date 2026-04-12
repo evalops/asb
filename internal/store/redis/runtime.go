@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/haasonsaas/asb/internal/core"
+	"github.com/evalops/asb/internal/core"
 	goredis "github.com/redis/go-redis/v9"
 )
 

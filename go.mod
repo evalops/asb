@@ -1,4 +1,4 @@
-module github.com/haasonsaas/asb
+module github.com/evalops/asb
 
 go 1.24.0
 

@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/haasonsaas/asb/internal/connectors/github"
-	"github.com/haasonsaas/asb/internal/connectors/resolver"
+	"github.com/evalops/asb/internal/connectors/github"
+	"github.com/evalops/asb/internal/connectors/resolver"
 )
 
 func TestStaticResolver_ResolvesByResourceRef(t *testing.T) {

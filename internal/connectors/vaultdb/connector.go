@@ -7,7 +7,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/haasonsaas/asb/internal/core"
+	"github.com/evalops/asb/internal/core"
 )
 
 type LeaseCredentials struct {

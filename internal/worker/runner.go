@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/haasonsaas/asb/internal/app"
+	"github.com/evalops/asb/internal/app"
 )
 
 type CleanupService interface {

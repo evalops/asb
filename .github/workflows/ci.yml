@@ -41,16 +41,14 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           if git show origin/main:buf.yaml >/dev/null 2>&1; then
-            buf breaking --against '.git#branch=main'
+            git fetch origin main:refs/remotes/origin/main
+            buf breaking --against '.git#ref=refs/remotes/origin/main'
           else
             echo "Skipping: no buf.yaml on main yet"
           fi
 
-      - name: Regenerate Protos
-        run: make proto
-
-      - name: Verify Clean Working Tree
-        run: git diff --exit-code
+      - name: Verify Proto Sync
+        run: make proto-check
 
       - name: Vet
         run: go vet ./...

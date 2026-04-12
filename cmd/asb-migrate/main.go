@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/haasonsaas/asb/internal/migrate"
+	"github.com/evalops/asb/internal/migrate"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

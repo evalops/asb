@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/haasonsaas/asb/internal/core"
-	"github.com/haasonsaas/asb/internal/delivery/proxy"
+	"github.com/evalops/asb/internal/core"
+	"github.com/evalops/asb/internal/delivery/proxy"
 )
 
 func TestBudgetTracker_EnforcesConcurrencyRequestAndByteBudgets(t *testing.T) {

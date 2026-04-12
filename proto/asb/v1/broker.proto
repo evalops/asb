@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package asb.v1;
 
-option go_package = "github.com/haasonsaas/asb/proto/asb/v1;asbv1";
+option go_package = "github.com/evalops/asb/proto/asb/v1;asbv1";
 
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";

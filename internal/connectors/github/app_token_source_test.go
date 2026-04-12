@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/haasonsaas/asb/internal/connectors/github"
+	"github.com/evalops/asb/internal/connectors/github"
 )
 
 func TestAppTokenSource_TokenForRepoUsesInstallationTokenAndCaches(t *testing.T) {

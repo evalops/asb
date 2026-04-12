@@ -1475,7 +1475,7 @@ const file_asb_v1_broker_proto_rawDesc = "" +
 	"\rRevokeSession\x12\x1c.asb.v1.RevokeSessionRequest\x1a\x1d.asb.v1.RevokeSessionResponse\x12[\n" +
 	"\x12ExecuteGitHubProxy\x12!.asb.v1.ExecuteGitHubProxyRequest\x1a\".asb.v1.ExecuteGitHubProxyResponse\x12a\n" +
 	"\x14RegisterBrowserRelay\x12#.asb.v1.RegisterBrowserRelayRequest\x1a$.asb.v1.RegisterBrowserRelayResponse\x12O\n" +
-	"\x0eUnwrapArtifact\x12\x1d.asb.v1.UnwrapArtifactRequest\x1a\x1e.asb.v1.UnwrapArtifactResponseB.Z,github.com/haasonsaas/asb/proto/asb/v1;asbv1b\x06proto3"
+	"\x0eUnwrapArtifact\x12\x1d.asb.v1.UnwrapArtifactRequest\x1a\x1e.asb.v1.UnwrapArtifactResponseB+Z)github.com/evalops/asb/proto/asb/v1;asbv1b\x06proto3"
 
 var (
 	file_asb_v1_broker_proto_rawDescOnce sync.Once

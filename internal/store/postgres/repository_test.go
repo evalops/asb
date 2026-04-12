@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/haasonsaas/asb/internal/core"
-	"github.com/haasonsaas/asb/internal/store/postgres"
+	"github.com/evalops/asb/internal/core"
+	"github.com/evalops/asb/internal/store/postgres"
 	pgxmock "github.com/pashagolub/pgxmock/v4"
 )
 
