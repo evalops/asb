@@ -8,26 +8,30 @@ import (
 )
 
 type serverConfig struct {
-	addr           string
-	maxBodyBytes   int64
-	readTimeout    time.Duration
-	writeTimeout   time.Duration
-	idleTimeout    time.Duration
-	defaultTimeout time.Duration
-	grantTimeout   time.Duration
-	proxyTimeout   time.Duration
+	addr            string
+	maxBodyBytes    int64
+	readTimeout     time.Duration
+	writeTimeout    time.Duration
+	idleTimeout     time.Duration
+	readyTimeout    time.Duration
+	shutdownTimeout time.Duration
+	defaultTimeout  time.Duration
+	grantTimeout    time.Duration
+	proxyTimeout    time.Duration
 }
 
 func loadServerConfig() (serverConfig, error) {
 	cfg := serverConfig{
-		addr:           getenv("ASB_ADDR", ":8080"),
-		maxBodyBytes:   1 << 20,
-		readTimeout:    10 * time.Second,
-		writeTimeout:   30 * time.Second,
-		idleTimeout:    120 * time.Second,
-		defaultTimeout: 10 * time.Second,
-		grantTimeout:   20 * time.Second,
-		proxyTimeout:   30 * time.Second,
+		addr:            getenv("ASB_ADDR", ":8080"),
+		maxBodyBytes:    1 << 20,
+		readTimeout:     10 * time.Second,
+		writeTimeout:    30 * time.Second,
+		idleTimeout:     120 * time.Second,
+		readyTimeout:    2 * time.Second,
+		shutdownTimeout: 30 * time.Second,
+		defaultTimeout:  10 * time.Second,
+		grantTimeout:    20 * time.Second,
+		proxyTimeout:    30 * time.Second,
 	}
 
 	var err error
@@ -41,6 +45,12 @@ func loadServerConfig() (serverConfig, error) {
 		return serverConfig{}, err
 	}
 	if cfg.idleTimeout, err = parsePositiveDurationEnv("ASB_HTTP_IDLE_TIMEOUT", cfg.idleTimeout); err != nil {
+		return serverConfig{}, err
+	}
+	if cfg.readyTimeout, err = parsePositiveDurationEnv("ASB_HTTP_READY_TIMEOUT", cfg.readyTimeout); err != nil {
+		return serverConfig{}, err
+	}
+	if cfg.shutdownTimeout, err = parsePositiveDurationEnv("ASB_HTTP_SHUTDOWN_TIMEOUT", cfg.shutdownTimeout); err != nil {
 		return serverConfig{}, err
 	}
 	if cfg.defaultTimeout, err = parsePositiveDurationEnv("ASB_HTTP_DEFAULT_TIMEOUT", cfg.defaultTimeout); err != nil {

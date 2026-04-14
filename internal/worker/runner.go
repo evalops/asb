@@ -63,7 +63,10 @@ func (r *Runner) RunOnce(ctx context.Context) (*app.CleanupStats, error) {
 }
 
 func (r *Runner) Run(ctx context.Context) error {
-	if _, err := r.RunOnce(ctx); err != nil {
+	if ctx.Err() != nil {
+		return nil
+	}
+	if _, err := r.RunOnce(context.WithoutCancel(ctx)); err != nil {
 		return err
 	}
 
@@ -75,7 +78,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			if _, err := r.RunOnce(ctx); err != nil {
+			if _, err := r.RunOnce(context.WithoutCancel(ctx)); err != nil {
 				return err
 			}
 		}

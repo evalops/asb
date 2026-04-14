@@ -42,6 +42,30 @@ type serviceOptions struct {
 	requireVerifier bool
 }
 
+type readinessProbe func(context.Context) error
+
+type ServiceRuntime struct {
+	Service *app.Service
+	Cleanup func()
+	Health  *HealthChecker
+}
+
+type HealthChecker struct {
+	postgresProbe      readinessProbe
+	redisProbe         readinessProbe
+	sessionTokensReady bool
+}
+
+type ReadinessCheck struct {
+	Status  string `json:"status"`
+	Message string `json:"message,omitempty"`
+}
+
+type ReadinessReport struct {
+	Ready  bool                      `json:"ready"`
+	Checks map[string]ReadinessCheck `json:"checks"`
+}
+
 func WithVerificationOptional() ServiceOption {
 	return func(options *serviceOptions) {
 		options.requireVerifier = false
@@ -49,6 +73,14 @@ func WithVerificationOptional() ServiceOption {
 }
 
 func NewService(ctx context.Context, logger *slog.Logger, options ...ServiceOption) (*app.Service, func(), error) {
+	runtime, err := NewServiceRuntime(ctx, logger, options...)
+	if err != nil {
+		return nil, nil, err
+	}
+	return runtime.Service, runtime.Cleanup, nil
+}
+
+func NewServiceRuntime(ctx context.Context, logger *slog.Logger, options ...ServiceOption) (*ServiceRuntime, error) {
 	config := serviceOptions{requireVerifier: true}
 	for _, option := range options {
 		option(&config)
@@ -56,20 +88,20 @@ func NewService(ctx context.Context, logger *slog.Logger, options ...ServiceOpti
 
 	verifier, err := newVerifier(config.requireVerifier)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	sessionTokens, err := newSessionTokenManager()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	repository, cleanupRepository, err := newRepository(ctx)
+	repository, cleanupRepository, postgresProbe, err := newRepository(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	runtimeStore, cleanupRuntime, err := newRuntimeStore(ctx)
+	runtimeStore, cleanupRuntime, redisProbe, err := newRuntimeStore(ctx)
 	if err != nil {
 		cleanupRepository()
-		return nil, nil, err
+		return nil, err
 	}
 
 	auditSink := auditmemory.NewSink()
@@ -83,7 +115,7 @@ func NewService(ctx context.Context, logger *slog.Logger, options ...ServiceOpti
 	if err != nil {
 		cleanupRuntime()
 		cleanupRepository()
-		return nil, nil, err
+		return nil, err
 	}
 
 	tenantID := getenv("ASB_DEV_TENANT_ID", "t_dev")
@@ -188,7 +220,7 @@ func NewService(ctx context.Context, logger *slog.Logger, options ...ServiceOpti
 	if err != nil {
 		cleanupRuntime()
 		cleanupRepository()
-		return nil, nil, err
+		return nil, err
 	}
 
 	svc, err := app.NewService(app.Config{
@@ -211,13 +243,68 @@ func NewService(ctx context.Context, logger *slog.Logger, options ...ServiceOpti
 	if err != nil {
 		cleanupRuntime()
 		cleanupRepository()
-		return nil, nil, err
+		return nil, err
 	}
 
-	return svc, func() {
-		cleanupRuntime()
-		cleanupRepository()
+	return &ServiceRuntime{
+		Service: svc,
+		Cleanup: func() {
+			cleanupRuntime()
+			cleanupRepository()
+		},
+		Health: &HealthChecker{
+			postgresProbe:      postgresProbe,
+			redisProbe:         redisProbe,
+			sessionTokensReady: sessionTokens != nil,
+		},
 	}, nil
+}
+
+func (h *HealthChecker) CheckReadiness(ctx context.Context) ReadinessReport {
+	report := ReadinessReport{
+		Ready: true,
+		Checks: map[string]ReadinessCheck{
+			"session_signing_key": readyCheck(h.sessionTokensReady),
+			"postgres":            disabledCheck(),
+			"redis":               disabledCheck(),
+		},
+	}
+
+	if h.postgresProbe != nil {
+		report.Checks["postgres"] = runProbe(ctx, h.postgresProbe)
+		if report.Checks["postgres"].Status != "ok" {
+			report.Ready = false
+		}
+	}
+	if h.redisProbe != nil {
+		report.Checks["redis"] = runProbe(ctx, h.redisProbe)
+		if report.Checks["redis"].Status != "ok" {
+			report.Ready = false
+		}
+	}
+	if report.Checks["session_signing_key"].Status != "ok" {
+		report.Ready = false
+	}
+
+	return report
+}
+
+func readyCheck(ok bool) ReadinessCheck {
+	if ok {
+		return ReadinessCheck{Status: "ok"}
+	}
+	return ReadinessCheck{Status: "error", Message: "session token manager is not configured"}
+}
+
+func disabledCheck() ReadinessCheck {
+	return ReadinessCheck{Status: "disabled"}
+}
+
+func runProbe(ctx context.Context, probe readinessProbe) ReadinessCheck {
+	if err := probe(ctx); err != nil {
+		return ReadinessCheck{Status: "error", Message: err.Error()}
+	}
+	return ReadinessCheck{Status: "ok"}
 }
 
 func newVerifier(require bool) (core.AttestationVerifier, error) {
@@ -320,18 +407,18 @@ func newGitHubProxyExecutor() (core.GitHubProxyExecutor, error) {
 	}), nil
 }
 
-func newRepository(ctx context.Context) (core.Repository, func(), error) {
+func newRepository(ctx context.Context) (core.Repository, func(), readinessProbe, error) {
 	if dsn := os.Getenv("ASB_POSTGRES_DSN"); dsn != "" {
 		pool, err := pgxpool.New(ctx, dsn)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
-		return postgresstore.NewRepository(pool), pool.Close, nil
+		return postgresstore.NewRepository(pool), pool.Close, pool.Ping, nil
 	}
-	return memstore.NewRepository(), func() {}, nil
+	return memstore.NewRepository(), func() {}, nil, nil
 }
 
-func newRuntimeStore(ctx context.Context) (core.RuntimeStore, func(), error) {
+func newRuntimeStore(ctx context.Context) (core.RuntimeStore, func(), readinessProbe, error) {
 	if addr := os.Getenv("ASB_REDIS_ADDR"); addr != "" {
 		client := goredis.NewClient(&goredis.Options{
 			Addr:     addr,
@@ -339,11 +426,13 @@ func newRuntimeStore(ctx context.Context) (core.RuntimeStore, func(), error) {
 			DB:       0,
 		})
 		if err := client.Ping(ctx).Err(); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
-		return redisstore.NewRuntimeStore(client), func() { _ = client.Close() }, nil
+		return redisstore.NewRuntimeStore(client), func() { _ = client.Close() }, func(ctx context.Context) error {
+			return client.Ping(ctx).Err()
+		}, nil
 	}
-	return memstore.NewRuntimeStore(), func() {}, nil
+	return memstore.NewRuntimeStore(), func() {}, nil, nil
 }
 
 func loadPublicKey(path string) (any, error) {
