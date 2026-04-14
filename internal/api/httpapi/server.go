@@ -49,6 +49,7 @@ const (
 )
 
 var errUnsupportedContentType = errors.New("content-type must be application/json")
+var errSingleJSONObject = errors.New("request body must contain a single JSON object")
 
 func NewServer(service Service, options ...Option) *Server {
 	server := &Server{
@@ -107,23 +108,23 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/sessions":
-		s.handleCreateSession(w, s.withTimeout(r, s.timeouts.defaultTimeout))
+		s.serveWithTimeout(w, r, s.timeouts.defaultTimeout, s.handleCreateSession)
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/grants":
-		s.handleRequestGrant(w, s.withTimeout(r, s.timeouts.grantTimeout))
+		s.serveWithTimeout(w, r, s.timeouts.grantTimeout, s.handleRequestGrant)
 	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/approvals/") && strings.HasSuffix(r.URL.Path, ":approve"):
-		s.handleApproveGrant(w, s.withTimeout(r, s.timeouts.grantTimeout))
+		s.serveWithTimeout(w, r, s.timeouts.grantTimeout, s.handleApproveGrant)
 	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/approvals/") && strings.HasSuffix(r.URL.Path, ":deny"):
-		s.handleDenyGrant(w, s.withTimeout(r, s.timeouts.defaultTimeout))
+		s.serveWithTimeout(w, r, s.timeouts.defaultTimeout, s.handleDenyGrant)
 	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/grants/") && strings.HasSuffix(r.URL.Path, ":revoke"):
-		s.handleRevokeGrant(w, s.withTimeout(r, s.timeouts.defaultTimeout))
+		s.serveWithTimeout(w, r, s.timeouts.defaultTimeout, s.handleRevokeGrant)
 	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/sessions/") && strings.HasSuffix(r.URL.Path, ":revoke"):
-		s.handleRevokeSession(w, s.withTimeout(r, s.timeouts.defaultTimeout))
+		s.serveWithTimeout(w, r, s.timeouts.defaultTimeout, s.handleRevokeSession)
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/proxy/github/rest":
-		s.handleExecuteGitHubProxy(w, s.withTimeout(r, s.timeouts.proxyTimeout))
+		s.serveWithTimeout(w, r, s.timeouts.proxyTimeout, s.handleExecuteGitHubProxy)
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/browser/relay-sessions":
-		s.handleRegisterBrowserRelay(w, s.withTimeout(r, s.timeouts.defaultTimeout))
+		s.serveWithTimeout(w, r, s.timeouts.defaultTimeout, s.handleRegisterBrowserRelay)
 	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/artifacts/") && strings.HasSuffix(r.URL.Path, ":unwrap"):
-		s.handleUnwrapArtifact(w, s.withTimeout(r, s.timeouts.defaultTimeout))
+		s.serveWithTimeout(w, r, s.timeouts.defaultTimeout, s.handleUnwrapArtifact)
 	default:
 		http.NotFound(w, r)
 	}
@@ -368,7 +369,7 @@ func writeError(w http.ResponseWriter, err error) {
 		status = http.StatusUnsupportedMediaType
 	case errors.As(err, &maxBytesErr):
 		status = http.StatusRequestEntityTooLarge
-	case errors.As(err, &syntaxErr), errors.As(err, &typeErr), errors.Is(err, io.EOF):
+	case errors.As(err, &syntaxErr), errors.As(err, &typeErr), errors.Is(err, io.EOF), errors.Is(err, errSingleJSONObject):
 		status = http.StatusBadRequest
 	case errors.Is(err, core.ErrInvalidRequest):
 		status = http.StatusBadRequest
@@ -382,17 +383,21 @@ func writeError(w http.ResponseWriter, err error) {
 	writeJSON(w, status, map[string]string{"error": err.Error()})
 }
 
-func (s *Server) withTimeout(r *http.Request, timeout time.Duration) *http.Request {
+func (s *Server) serveWithTimeout(w http.ResponseWriter, r *http.Request, timeout time.Duration, handler func(http.ResponseWriter, *http.Request)) {
+	r, cancel := s.withTimeout(r, timeout)
+	defer cancel()
+	handler(w, r)
+}
+
+func (s *Server) withTimeout(r *http.Request, timeout time.Duration) (*http.Request, context.CancelFunc) {
 	if timeout <= 0 {
-		return r
+		return r, func() {}
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), timeout)
-	return r.Clone(context.WithValue(ctx, requestCancelKey{}, cancel))
+	return r.Clone(ctx), cancel
 }
 
 func (s *Server) decodeJSON(w http.ResponseWriter, r *http.Request, out any) error {
-	defer s.finishRequest(r)
-
 	if err := requireJSONContentType(r); err != nil {
 		return err
 	}
@@ -405,19 +410,13 @@ func (s *Server) decodeJSON(w http.ResponseWriter, r *http.Request, out any) err
 	if err := decoder.Decode(out); err != nil {
 		return err
 	}
-	if err := decoder.Decode(&struct{}{}); err != nil && !errors.Is(err, io.EOF) {
-		return errors.New("request body must contain a single JSON object")
+	var extra any
+	if err := decoder.Decode(&extra); err == nil {
+		return errSingleJSONObject
+	} else if !errors.Is(err, io.EOF) {
+		return errSingleJSONObject
 	}
 	return nil
-}
-
-type requestCancelKey struct{}
-
-func (s *Server) finishRequest(r *http.Request) {
-	cancel, _ := r.Context().Value(requestCancelKey{}).(context.CancelFunc)
-	if cancel != nil {
-		cancel()
-	}
 }
 
 func requireJSONContentType(r *http.Request) error {

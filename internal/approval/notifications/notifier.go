@@ -43,28 +43,13 @@ func NewNotifier(cfg Config) (*Notifier, error) {
 	if strings.TrimSpace(cfg.BaseURL) == "" {
 		return nil, fmt.Errorf("notifications base url is required")
 	}
-	if strings.TrimSpace(cfg.RecipientID) == "" {
-		return nil, fmt.Errorf("notifications recipient id is required")
-	}
-	if cfg.Channel == notificationsv1.DeliveryChannel_DELIVERY_CHANNEL_UNSPECIFIED {
-		return nil, fmt.Errorf("notifications channel is required")
-	}
-	if cfg.Priority == notificationsv1.Priority_PRIORITY_UNSPECIFIED {
-		cfg.Priority = notificationsv1.Priority_PRIORITY_HIGH
-	}
 	if cfg.Client == nil {
 		cfg.Client = &http.Client{Timeout: 5 * time.Second}
 	}
-
-	return &Notifier{
-		client:        notificationsv1connect.NewNotificationServiceClient(cfg.Client, strings.TrimRight(cfg.BaseURL, "/")),
-		bearerToken:   strings.TrimSpace(cfg.BearerToken),
-		workspaceID:   strings.TrimSpace(cfg.WorkspaceID),
-		recipientID:   strings.TrimSpace(cfg.RecipientID),
-		channel:       cfg.Channel,
-		priority:      cfg.Priority,
-		publicBaseURL: strings.TrimRight(strings.TrimSpace(cfg.PublicBaseURL), "/"),
-	}, nil
+	return NewNotifierWithClient(
+		notificationsv1connect.NewNotificationServiceClient(cfg.Client, strings.TrimRight(cfg.BaseURL, "/")),
+		cfg,
+	)
 }
 
 func NewNotifierWithClient(client notificationSender, cfg Config) (*Notifier, error) {
