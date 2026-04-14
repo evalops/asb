@@ -1,12 +1,11 @@
 package app
 
 import (
-	"fmt"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/evalops/asb/internal/core"
+	"github.com/evalops/asb/internal/promutil"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -36,9 +35,9 @@ type Metrics struct {
 // NewMetrics creates Prometheus collectors for ASB domain metrics.
 func NewMetrics(serviceName string, opts MetricsOptions) (*Metrics, error) {
 	opts = opts.withDefaults()
-	prefix := metricsPrefix(serviceName)
+	prefix := promutil.MetricPrefix(serviceName)
 
-	sessionsActive, err := registerGaugeVec(
+	sessionsActive, err := promutil.RegisterGaugeVec(
 		opts.Registerer,
 		prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
@@ -52,7 +51,7 @@ func NewMetrics(serviceName string, opts MetricsOptions) (*Metrics, error) {
 		return nil, err
 	}
 
-	sessionsTotal, err := registerCounterVec(
+	sessionsTotal, err := promutil.RegisterCounterVec(
 		opts.Registerer,
 		prometheus.NewCounterVec(
 			prometheus.CounterOpts{
@@ -66,7 +65,7 @@ func NewMetrics(serviceName string, opts MetricsOptions) (*Metrics, error) {
 		return nil, err
 	}
 
-	grantsTotal, err := registerCounterVec(
+	grantsTotal, err := promutil.RegisterCounterVec(
 		opts.Registerer,
 		prometheus.NewCounterVec(
 			prometheus.CounterOpts{
@@ -80,7 +79,7 @@ func NewMetrics(serviceName string, opts MetricsOptions) (*Metrics, error) {
 		return nil, err
 	}
 
-	grantTTL, err := registerHistogram(
+	grantTTL, err := promutil.RegisterHistogram(
 		opts.Registerer,
 		prometheus.NewHistogram(
 			prometheus.HistogramOpts{
@@ -94,7 +93,7 @@ func NewMetrics(serviceName string, opts MetricsOptions) (*Metrics, error) {
 		return nil, err
 	}
 
-	approvalsTotal, err := registerCounterVec(
+	approvalsTotal, err := promutil.RegisterCounterVec(
 		opts.Registerer,
 		prometheus.NewCounterVec(
 			prometheus.CounterOpts{
@@ -108,7 +107,7 @@ func NewMetrics(serviceName string, opts MetricsOptions) (*Metrics, error) {
 		return nil, err
 	}
 
-	approvalWait, err := registerHistogramVec(
+	approvalWait, err := promutil.RegisterHistogramVec(
 		opts.Registerer,
 		prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{
@@ -123,7 +122,7 @@ func NewMetrics(serviceName string, opts MetricsOptions) (*Metrics, error) {
 		return nil, err
 	}
 
-	policyEval, err := registerCounterVec(
+	policyEval, err := promutil.RegisterCounterVec(
 		opts.Registerer,
 		prometheus.NewCounterVec(
 			prometheus.CounterOpts{
@@ -137,7 +136,7 @@ func NewMetrics(serviceName string, opts MetricsOptions) (*Metrics, error) {
 		return nil, err
 	}
 
-	budgetExhaust, err := registerCounterVec(
+	budgetExhaust, err := promutil.RegisterCounterVec(
 		opts.Registerer,
 		prometheus.NewCounterVec(
 			prometheus.CounterOpts{
@@ -151,7 +150,7 @@ func NewMetrics(serviceName string, opts MetricsOptions) (*Metrics, error) {
 		return nil, err
 	}
 
-	artifactsActive, err := registerGaugeVec(
+	artifactsActive, err := promutil.RegisterGaugeVec(
 		opts.Registerer,
 		prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
@@ -165,7 +164,7 @@ func NewMetrics(serviceName string, opts MetricsOptions) (*Metrics, error) {
 		return nil, err
 	}
 
-	artifactUnwraps, err := registerCounterVec(
+	artifactUnwraps, err := promutil.RegisterCounterVec(
 		opts.Registerer,
 		prometheus.NewCounterVec(
 			prometheus.CounterOpts{
@@ -179,7 +178,7 @@ func NewMetrics(serviceName string, opts MetricsOptions) (*Metrics, error) {
 		return nil, err
 	}
 
-	connectorOps, err := registerCounterVec(
+	connectorOps, err := promutil.RegisterCounterVec(
 		opts.Registerer,
 		prometheus.NewCounterVec(
 			prometheus.CounterOpts{
@@ -193,7 +192,7 @@ func NewMetrics(serviceName string, opts MetricsOptions) (*Metrics, error) {
 		return nil, err
 	}
 
-	connectorLatency, err := registerHistogramVec(
+	connectorLatency, err := promutil.RegisterHistogramVec(
 		opts.Registerer,
 		prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{
@@ -352,93 +351,4 @@ func labelOrUnknown(value string) string {
 		return "unknown"
 	}
 	return value
-}
-
-func metricsPrefix(serviceName string) string {
-	serviceName = strings.TrimSpace(serviceName)
-	if serviceName == "" {
-		return "service"
-	}
-
-	var builder strings.Builder
-	for index, runeValue := range serviceName {
-		switch {
-		case unicode.IsLetter(runeValue), unicode.IsDigit(runeValue):
-			builder.WriteRune(unicode.ToLower(runeValue))
-		default:
-			builder.WriteByte('_')
-		}
-		if index == 0 && unicode.IsDigit(runeValue) {
-			builder.WriteByte('_')
-		}
-	}
-
-	prefix := strings.Trim(builder.String(), "_")
-	if prefix == "" {
-		return "service"
-	}
-	if prefix[0] >= '0' && prefix[0] <= '9' {
-		return "service_" + prefix
-	}
-	return prefix
-}
-
-func registerGaugeVec(registerer prometheus.Registerer, collector *prometheus.GaugeVec) (*prometheus.GaugeVec, error) {
-	if err := registerer.Register(collector); err != nil {
-		alreadyRegistered, ok := err.(prometheus.AlreadyRegisteredError)
-		if !ok {
-			return nil, err
-		}
-		existing, ok := alreadyRegistered.ExistingCollector.(*prometheus.GaugeVec)
-		if !ok {
-			return nil, err
-		}
-		return existing, nil
-	}
-	return collector, nil
-}
-
-func registerCounterVec(registerer prometheus.Registerer, collector *prometheus.CounterVec) (*prometheus.CounterVec, error) {
-	if err := registerer.Register(collector); err != nil {
-		alreadyRegistered, ok := err.(prometheus.AlreadyRegisteredError)
-		if !ok {
-			return nil, err
-		}
-		existing, ok := alreadyRegistered.ExistingCollector.(*prometheus.CounterVec)
-		if !ok {
-			return nil, err
-		}
-		return existing, nil
-	}
-	return collector, nil
-}
-
-func registerHistogram(registerer prometheus.Registerer, collector prometheus.Histogram) (prometheus.Histogram, error) {
-	if err := registerer.Register(collector); err != nil {
-		alreadyRegistered, ok := err.(prometheus.AlreadyRegisteredError)
-		if !ok {
-			return nil, err
-		}
-		existing, ok := alreadyRegistered.ExistingCollector.(prometheus.Histogram)
-		if !ok {
-			return nil, fmt.Errorf("register histogram: existing collector has unexpected type %T", alreadyRegistered.ExistingCollector)
-		}
-		return existing, nil
-	}
-	return collector, nil
-}
-
-func registerHistogramVec(registerer prometheus.Registerer, collector *prometheus.HistogramVec) (*prometheus.HistogramVec, error) {
-	if err := registerer.Register(collector); err != nil {
-		alreadyRegistered, ok := err.(prometheus.AlreadyRegisteredError)
-		if !ok {
-			return nil, err
-		}
-		existing, ok := alreadyRegistered.ExistingCollector.(*prometheus.HistogramVec)
-		if !ok {
-			return nil, err
-		}
-		return existing, nil
-	}
-	return collector, nil
 }

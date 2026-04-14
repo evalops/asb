@@ -1,12 +1,10 @@
 package worker
 
 import (
-	"fmt"
-	"strings"
 	"time"
-	"unicode"
 
 	"github.com/evalops/asb/internal/app"
+	"github.com/evalops/asb/internal/promutil"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -28,8 +26,8 @@ func NewMetrics(serviceName string, opts MetricsOptions) (*Metrics, error) {
 		opts.DurationBuckets = prometheus.DefBuckets
 	}
 
-	prefix := metricsPrefix(serviceName)
-	processed, err := registerCounterVec(
+	prefix := promutil.MetricPrefix(serviceName)
+	processed, err := promutil.RegisterCounterVec(
 		opts.Registerer,
 		prometheus.NewCounterVec(
 			prometheus.CounterOpts{
@@ -43,7 +41,7 @@ func NewMetrics(serviceName string, opts MetricsOptions) (*Metrics, error) {
 		return nil, err
 	}
 
-	duration, err := registerHistogram(
+	duration, err := promutil.RegisterHistogram(
 		opts.Registerer,
 		prometheus.NewHistogram(
 			prometheus.HistogramOpts{
@@ -75,63 +73,4 @@ func (m *Metrics) recordCleanupPass(stats *app.CleanupStats, duration time.Durat
 	m.processed.WithLabelValues("sessions").Add(float64(stats.SessionsExpired))
 	m.processed.WithLabelValues("grants").Add(float64(stats.GrantsExpired))
 	m.processed.WithLabelValues("artifacts").Add(float64(stats.ArtifactsExpired))
-}
-
-func metricsPrefix(serviceName string) string {
-	serviceName = strings.TrimSpace(serviceName)
-	if serviceName == "" {
-		return "service"
-	}
-
-	var builder strings.Builder
-	for index, runeValue := range serviceName {
-		switch {
-		case unicode.IsLetter(runeValue), unicode.IsDigit(runeValue):
-			builder.WriteRune(unicode.ToLower(runeValue))
-		default:
-			builder.WriteByte('_')
-		}
-		if index == 0 && unicode.IsDigit(runeValue) {
-			builder.WriteByte('_')
-		}
-	}
-
-	prefix := strings.Trim(builder.String(), "_")
-	if prefix == "" {
-		return "service"
-	}
-	if prefix[0] >= '0' && prefix[0] <= '9' {
-		return "service_" + prefix
-	}
-	return prefix
-}
-
-func registerCounterVec(registerer prometheus.Registerer, collector *prometheus.CounterVec) (*prometheus.CounterVec, error) {
-	if err := registerer.Register(collector); err != nil {
-		alreadyRegistered, ok := err.(prometheus.AlreadyRegisteredError)
-		if !ok {
-			return nil, err
-		}
-		existing, ok := alreadyRegistered.ExistingCollector.(*prometheus.CounterVec)
-		if !ok {
-			return nil, err
-		}
-		return existing, nil
-	}
-	return collector, nil
-}
-
-func registerHistogram(registerer prometheus.Registerer, collector prometheus.Histogram) (prometheus.Histogram, error) {
-	if err := registerer.Register(collector); err != nil {
-		alreadyRegistered, ok := err.(prometheus.AlreadyRegisteredError)
-		if !ok {
-			return nil, err
-		}
-		existing, ok := alreadyRegistered.ExistingCollector.(prometheus.Histogram)
-		if !ok {
-			return nil, fmt.Errorf("register histogram: existing collector has unexpected type %T", alreadyRegistered.ExistingCollector)
-		}
-		return existing, nil
-	}
-	return collector, nil
 }
