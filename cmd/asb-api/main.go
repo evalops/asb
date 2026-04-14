@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/evalops/asb/internal/api/connectapi"
 	"github.com/evalops/asb/internal/api/httpapi"
@@ -13,14 +16,15 @@ import (
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	svc, cleanup, err := bootstrap.NewService(ctx, logger)
+	runtime, err := bootstrap.NewServiceRuntime(ctx, logger)
 	if err != nil {
 		logger.Error("bootstrap service", "error", err)
 		os.Exit(1)
 	}
-	defer cleanup()
+	defer runtime.Cleanup()
 
 	cfg, err := loadServerConfig()
 	if err != nil {
@@ -30,16 +34,13 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", httpapi.NewServer(
-		svc,
+		runtime.Service,
 		httpapi.WithMaxBodyBytes(cfg.maxBodyBytes),
 		httpapi.WithRequestTimeouts(cfg.defaultTimeout, cfg.grantTimeout, cfg.proxyTimeout),
 	))
-	connectPath, connectHandler := connectapi.NewHandler(svc)
+	connectPath, connectHandler := connectapi.NewHandler(runtime.Service)
 	mux.Handle(connectPath, connectHandler)
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	})
+	registerHealthHandlers(mux, runtime.Health, cfg.readyTimeout)
 
 	server := &http.Server{
 		Addr:         cfg.addr,
@@ -55,12 +56,38 @@ func main() {
 		"read_timeout", cfg.readTimeout,
 		"write_timeout", cfg.writeTimeout,
 		"idle_timeout", cfg.idleTimeout,
+		"ready_timeout", cfg.readyTimeout,
+		"shutdown_timeout", cfg.shutdownTimeout,
 		"default_timeout", cfg.defaultTimeout,
 		"grant_timeout", cfg.grantTimeout,
 		"proxy_timeout", cfg.proxyTimeout,
 	)
-	if err := server.ListenAndServe(); err != nil {
-		logger.Error("server exited", "error", err)
+
+	serverErr := make(chan error, 1)
+	go func() {
+		serverErr <- server.ListenAndServe()
+	}()
+
+	select {
+	case err := <-serverErr:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("server exited", "error", err)
+			os.Exit(1)
+		}
+		return
+	case <-ctx.Done():
+		logger.Info("shutdown signal received")
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.shutdownTimeout)
+	defer cancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		logger.Error("shutdown server", "error", err)
+		os.Exit(1)
+	}
+
+	if err := <-serverErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
+		logger.Error("server exited after shutdown", "error", err)
 		os.Exit(1)
 	}
 }

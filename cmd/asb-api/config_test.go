@@ -11,6 +11,8 @@ func TestLoadServerConfigDefaults(t *testing.T) {
 	t.Setenv("ASB_HTTP_READ_TIMEOUT", "")
 	t.Setenv("ASB_HTTP_WRITE_TIMEOUT", "")
 	t.Setenv("ASB_HTTP_IDLE_TIMEOUT", "")
+	t.Setenv("ASB_HTTP_READY_TIMEOUT", "")
+	t.Setenv("ASB_HTTP_SHUTDOWN_TIMEOUT", "")
 	t.Setenv("ASB_HTTP_DEFAULT_TIMEOUT", "")
 	t.Setenv("ASB_HTTP_GRANT_TIMEOUT", "")
 	t.Setenv("ASB_HTTP_PROXY_TIMEOUT", "")
@@ -28,6 +30,9 @@ func TestLoadServerConfigDefaults(t *testing.T) {
 	if cfg.readTimeout != 10*time.Second || cfg.writeTimeout != 30*time.Second || cfg.idleTimeout != 120*time.Second {
 		t.Fatalf("unexpected server timeouts: %#v", cfg)
 	}
+	if cfg.readyTimeout != 2*time.Second || cfg.shutdownTimeout != 30*time.Second {
+		t.Fatalf("unexpected health/shutdown timeouts: %#v", cfg)
+	}
 }
 
 func TestLoadServerConfigParsesOverrides(t *testing.T) {
@@ -36,6 +41,8 @@ func TestLoadServerConfigParsesOverrides(t *testing.T) {
 	t.Setenv("ASB_HTTP_READ_TIMEOUT", "11s")
 	t.Setenv("ASB_HTTP_WRITE_TIMEOUT", "41s")
 	t.Setenv("ASB_HTTP_IDLE_TIMEOUT", "2m")
+	t.Setenv("ASB_HTTP_READY_TIMEOUT", "3s")
+	t.Setenv("ASB_HTTP_SHUTDOWN_TIMEOUT", "35s")
 	t.Setenv("ASB_HTTP_DEFAULT_TIMEOUT", "9s")
 	t.Setenv("ASB_HTTP_GRANT_TIMEOUT", "29s")
 	t.Setenv("ASB_HTTP_PROXY_TIMEOUT", "45s")
@@ -49,6 +56,9 @@ func TestLoadServerConfigParsesOverrides(t *testing.T) {
 	}
 	if cfg.readTimeout != 11*time.Second || cfg.writeTimeout != 41*time.Second || cfg.idleTimeout != 2*time.Minute {
 		t.Fatalf("unexpected server timeouts: %#v", cfg)
+	}
+	if cfg.readyTimeout != 3*time.Second || cfg.shutdownTimeout != 35*time.Second {
+		t.Fatalf("unexpected health/shutdown timeouts: %#v", cfg)
 	}
 	if cfg.defaultTimeout != 9*time.Second || cfg.grantTimeout != 29*time.Second || cfg.proxyTimeout != 45*time.Second {
 		t.Fatalf("unexpected request timeouts: %#v", cfg)

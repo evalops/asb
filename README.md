@@ -236,6 +236,15 @@ Flags: `-interval` (default 30s), `-limit` (default 100 per pass), `-once` (sing
 | `ASB_POSTGRES_DSN` | Enables Postgres repository |
 | `ASB_REDIS_ADDR` | Enables Redis runtime store |
 | `ASB_REDIS_PASSWORD` | Redis authentication |
+| `ASB_HTTP_MAX_BODY_BYTES` | Maximum JSON request body size |
+| `ASB_HTTP_READ_TIMEOUT` | HTTP server read timeout |
+| `ASB_HTTP_WRITE_TIMEOUT` | HTTP server write timeout |
+| `ASB_HTTP_IDLE_TIMEOUT` | HTTP server idle timeout |
+| `ASB_HTTP_DEFAULT_TIMEOUT` | Default JSON handler timeout |
+| `ASB_HTTP_GRANT_TIMEOUT` | Grant and approval handler timeout |
+| `ASB_HTTP_PROXY_TIMEOUT` | Proxy handler timeout |
+| `ASB_HTTP_READY_TIMEOUT` | Dependency timeout for `/readyz` |
+| `ASB_HTTP_SHUTDOWN_TIMEOUT` | API shutdown drain timeout |
 | `ASB_GITHUB_TOKEN` | Static GitHub token (dev) |
 | `ASB_GITHUB_API_BASE_URL` | GitHub API base URL override |
 | `ASB_GITHUB_APP_ID` | GitHub App ID |
@@ -277,10 +286,11 @@ export ASB_GITHUB_TOKEN="ghp_..."
 make run-api
 ```
 
-### Health check
+### Health checks
 
 ```bash
 curl http://localhost:8080/healthz
+curl http://localhost:8080/readyz
 ```
 
 ## Testing

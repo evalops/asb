@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 	"testing"
 	"time"
 
@@ -59,18 +60,76 @@ func TestRunner_RunPropagatesErrors(t *testing.T) {
 	}
 }
 
-type fakeCleanupService struct {
-	stats *app.CleanupStats
-	err   error
-	calls int
+func TestRunner_RunDrainsCurrentPassBeforeExit(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	service := &fakeCleanupService{
+		stats: &app.CleanupStats{},
+		runCleanupOnce: func(ctx context.Context, limit int) (*app.CleanupStats, error) {
+			close(started)
+			<-release
+			return &app.CleanupStats{}, nil
+		},
+	}
+	runner := worker.NewRunner(worker.Config{
+		Service:  service,
+		Limit:    50,
+		Interval: 5 * time.Millisecond,
+		Logger:   slog.New(slog.NewTextHandler(testWriter{t}, nil)),
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- runner.Run(ctx)
+	}()
+
+	<-started
+	cancel()
+	close(release)
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Run() did not exit after draining current pass")
+	}
+
+	service.mu.Lock()
+	calls := service.calls
+	service.mu.Unlock()
+	if calls != 1 {
+		t.Fatalf("service calls = %d, want 1", calls)
+	}
 }
 
-func (f *fakeCleanupService) RunCleanupOnce(context.Context, int) (*app.CleanupStats, error) {
+type fakeCleanupService struct {
+	stats          *app.CleanupStats
+	err            error
+	runCleanupOnce func(context.Context, int) (*app.CleanupStats, error)
+	calls          int
+	mu             sync.Mutex
+}
+
+func (f *fakeCleanupService) RunCleanupOnce(ctx context.Context, limit int) (*app.CleanupStats, error) {
+	f.mu.Lock()
 	f.calls++
-	if f.err != nil {
-		return nil, f.err
+	runCleanupOnce := f.runCleanupOnce
+	stats := f.stats
+	err := f.err
+	f.mu.Unlock()
+
+	if runCleanupOnce != nil {
+		return runCleanupOnce(ctx, limit)
 	}
-	return f.stats, nil
+	if err != nil {
+		return nil, err
+	}
+	return stats, nil
 }
 
 type testWriter struct{ t *testing.T }
