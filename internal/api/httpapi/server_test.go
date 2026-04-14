@@ -163,6 +163,62 @@ func TestServer_RequestTimeoutReturnsGatewayTimeout(t *testing.T) {
 	}
 }
 
+func TestServer_ServiceContextRemainsAliveAfterDecode(t *testing.T) {
+	t.Parallel()
+
+	svc := &stubService{
+		createSession: func(ctx context.Context, req *core.CreateSessionRequest) (*core.CreateSessionResponse, error) {
+			if err := ctx.Err(); err != nil {
+				t.Fatalf("context canceled before service call: %v", err)
+			}
+			return &core.CreateSessionResponse{
+				SessionID:    "sess_abc",
+				SessionToken: "eyJ.test",
+				ExpiresAt:    time.Date(2026, 3, 12, 20, 15, 0, 0, time.UTC),
+			}, nil
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/sessions", bytes.NewBufferString(`{
+		"tenant_id":"t_acme",
+		"agent_id":"agent_pr_reviewer",
+		"run_id":"run_7f9",
+		"tool_context":["github"],
+		"attestation":{"kind":"k8s_sa_jwt","token":"jwt"}
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	httpapi.NewServer(svc, httpapi.WithRequestTimeouts(time.Second, time.Second, time.Second)).ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+}
+
+func TestServer_RejectsTrailingJSONValue(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/sessions", bytes.NewBufferString(`{
+		"tenant_id":"t_acme",
+		"agent_id":"agent_pr_reviewer",
+		"run_id":"run_7f9",
+		"tool_context":["github"],
+		"attestation":{"kind":"k8s_sa_jwt","token":"jwt"}
+	}{"extra":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	httpapi.NewServer(&stubService{}).ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+	if !strings.Contains(recorder.Body.String(), "single JSON object") {
+		t.Fatalf("body = %q, want single-object error", recorder.Body.String())
+	}
+}
+
 func TestServer_RateLimitReturnsTooManyRequests(t *testing.T) {
 	t.Parallel()
 
