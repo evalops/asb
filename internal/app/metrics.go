@@ -142,9 +142,9 @@ func NewMetrics(serviceName string, opts MetricsOptions) (*Metrics, error) {
 		prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: prefix + "_budget_exhaustion_total",
-				Help: "Count of ASB proxy budget exhaustion events by handle.",
+				Help: "Count of ASB proxy budget exhaustion events by connector kind.",
 			},
-			[]string{"handle"},
+			[]string{"connector_kind"},
 		),
 	)
 	if err != nil {
@@ -299,11 +299,11 @@ func (metrics *Metrics) recordPolicyEvaluation(capability string, allowed bool) 
 	metrics.policyEval.WithLabelValues(labelOrUnknown(capability), outcome).Inc()
 }
 
-func (metrics *Metrics) recordBudgetExhaustion(handle string) {
+func (metrics *Metrics) recordBudgetExhaustion(connectorKind string) {
 	if metrics == nil {
 		return
 	}
-	metrics.budgetExhaust.WithLabelValues(labelOrUnknown(handle)).Inc()
+	metrics.budgetExhaust.WithLabelValues(labelOrUnknown(connectorKind)).Inc()
 }
 
 func (metrics *Metrics) recordArtifactCreated(connectorKind string) {

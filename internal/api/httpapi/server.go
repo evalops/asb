@@ -28,6 +28,7 @@ type Service interface {
 
 type Server struct {
 	service     Service
+	handler     http.Handler
 	maxBody     int64
 	timeouts    requestTimeouts
 	rateLimiter *ratelimit.Limiter
@@ -64,6 +65,10 @@ func NewServer(service Service, options ...Option) *Server {
 	for _, option := range options {
 		option(server)
 	}
+	server.handler = http.HandlerFunc(server.serveHTTP)
+	if server.rateLimiter != nil {
+		server.handler = server.rateLimiter.Middleware(server.handler)
+	}
 	return server
 }
 
@@ -96,11 +101,11 @@ func WithRateLimiter(limiter *ratelimit.Limiter) Option {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if s.rateLimiter != nil {
-		s.rateLimiter.Middleware(http.HandlerFunc(s.serveHTTP)).ServeHTTP(w, r)
+	if s.handler == nil {
+		s.serveHTTP(w, r)
 		return
 	}
-	s.serveHTTP(w, r)
+	s.handler.ServeHTTP(w, r)
 }
 
 func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {

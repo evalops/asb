@@ -509,7 +509,7 @@ func (s *Service) ExecuteGitHubProxy(ctx context.Context, req *core.ExecuteGitHu
 	if s.runtime != nil {
 		if err := s.runtime.AcquireProxyRequest(ctx, req.ProxyHandle); err != nil {
 			if errors.Is(err, core.ErrResourceBudgetExceeded) {
-				s.metrics.recordBudgetExhaustion(req.ProxyHandle)
+				s.metrics.recordBudgetExhaustion(artifact.ConnectorKind)
 			}
 			return nil, fmt.Errorf("execute github proxy %q: acquire proxy request budget: %w", req.ProxyHandle, err)
 		}
@@ -545,7 +545,7 @@ func (s *Service) ExecuteGitHubProxy(ctx context.Context, req *core.ExecuteGitHu
 	if acquired && s.runtime != nil {
 		if err := s.runtime.CompleteProxyRequest(cleanupCtx, req.ProxyHandle, responseBytes); err != nil {
 			if errors.Is(err, core.ErrResourceBudgetExceeded) {
-				s.metrics.recordBudgetExhaustion(req.ProxyHandle)
+				s.metrics.recordBudgetExhaustion(artifact.ConnectorKind)
 			}
 			return nil, fmt.Errorf("execute github proxy %q operation %q: release proxy request budget: %w", req.ProxyHandle, req.Operation, err)
 		}
