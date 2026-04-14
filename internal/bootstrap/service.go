@@ -479,13 +479,16 @@ func newRuntimeStore(ctx context.Context) (core.RuntimeStore, func(), readinessP
 			Password: os.Getenv("ASB_REDIS_PASSWORD"),
 			DB:       0,
 		})
+		closeClient := func() { _ = client.Close() }
 		if err := instrumentDefaultRedisClient(client); err != nil {
+			closeClient()
 			return nil, nil, nil, nil, err
 		}
 		if err := client.Ping(ctx).Err(); err != nil {
+			closeClient()
 			return nil, nil, nil, nil, err
 		}
-		return redisstore.NewRuntimeStore(client), func() { _ = client.Close() }, func(ctx context.Context) error {
+		return redisstore.NewRuntimeStore(client), closeClient, func(ctx context.Context) error {
 			return client.Ping(ctx).Err()
 		}, redisPoolStats(client), nil
 	}
@@ -507,7 +510,7 @@ func pgxPoolDBStats(pool *pgxpool.Pool) func() sql.DBStats {
 	}
 }
 
-func redisPoolStats(client goredis.UniversalClient) func() *goredis.PoolStats {
+func redisPoolStats(client *goredis.Client) func() *goredis.PoolStats {
 	if client == nil {
 		return nil
 	}

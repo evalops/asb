@@ -89,3 +89,15 @@ func TestLoadServerConfigRejectsInvalidValues(t *testing.T) {
 		t.Fatal("loadServerConfig() error = nil, want non-nil")
 	}
 }
+
+func TestLoadServerConfigRejectsNonFiniteRateLimit(t *testing.T) {
+	for _, raw := range []string{"NaN", "Inf", "-Inf"} {
+		t.Run(raw, func(t *testing.T) {
+			t.Setenv("ASB_HTTP_RATE_LIMIT_RPS", raw)
+
+			if _, err := loadServerConfig(); err == nil {
+				t.Fatalf("loadServerConfig() error = nil for %q, want non-nil", raw)
+			}
+		})
+	}
+}

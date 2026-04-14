@@ -674,7 +674,7 @@ func TestServiceMetrics_BudgetExhaustion(t *testing.T) {
 	}
 
 	families := mustGatherMetrics(t, registry)
-	if got := metricValueWithLabels(families, "asb_budget_exhaustion_total", map[string]string{"handle": "ph_budget_metrics"}); got != 1 {
+	if got := metricValueWithLabels(families, "asb_budget_exhaustion_total", map[string]string{"connector_kind": "github"}); got != 1 {
 		t.Fatalf("budget exhaustion count = %v, want 1", got)
 	}
 }
