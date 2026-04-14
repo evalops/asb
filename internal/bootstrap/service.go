@@ -469,6 +469,9 @@ func newRuntimeStore(ctx context.Context) (core.RuntimeStore, func(), readinessP
 			Password: os.Getenv("ASB_REDIS_PASSWORD"),
 			DB:       0,
 		})
+		if err := instrumentDefaultRedisClient(client); err != nil {
+			return nil, nil, nil, nil, err
+		}
 		if err := client.Ping(ctx).Err(); err != nil {
 			return nil, nil, nil, nil, err
 		}
