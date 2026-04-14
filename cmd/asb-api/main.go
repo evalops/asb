@@ -12,6 +12,7 @@ import (
 	"github.com/evalops/asb/internal/api/connectapi"
 	"github.com/evalops/asb/internal/api/httpapi"
 	"github.com/evalops/asb/internal/bootstrap"
+	"github.com/evalops/service-runtime/observability"
 	"github.com/evalops/service-runtime/ratelimit"
 )
 
@@ -30,6 +31,12 @@ func main() {
 	cfg, err := loadServerConfig()
 	if err != nil {
 		logger.Error("load server config", "error", err)
+		os.Exit(1)
+	}
+
+	metrics, err := observability.NewMetrics("asb", observability.MetricsOptions{})
+	if err != nil {
+		logger.Error("initialize metrics", "error", err)
 		os.Exit(1)
 	}
 
@@ -55,7 +62,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:         cfg.addr,
-		Handler:      mux,
+		Handler:      newObservedHandler(logger, metrics, mux),
 		ReadTimeout:  cfg.readTimeout,
 		WriteTimeout: cfg.writeTimeout,
 		IdleTimeout:  cfg.idleTimeout,
