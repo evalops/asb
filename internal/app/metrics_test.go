@@ -126,6 +126,12 @@ func TestServiceMetrics_CreateSessionAndIssueGrant(t *testing.T) {
 	if got := metricValueWithLabels(families, "asb_artifacts_active", map[string]string{"connector_kind": "github"}); got != 1 {
 		t.Fatalf("active github artifacts = %v, want 1", got)
 	}
+	if got := metricValueWithLabels(families, "asb_connector_operations_total", map[string]string{"connector_kind": "github", "operation": "issue", "outcome": "success"}); got != 1 {
+		t.Fatalf("github issue connector ops = %v, want 1", got)
+	}
+	if got := histogramCountWithLabels(families, "asb_connector_operation_seconds", map[string]string{"connector_kind": "github", "operation": "issue"}); got != 1 {
+		t.Fatalf("github issue connector latency count = %d, want 1", got)
+	}
 	if got := histogramCountWithLabels(families, "asb_grant_ttl_seconds", nil); got != 1 {
 		t.Fatalf("grant TTL histogram count = %d, want 1", got)
 	}
@@ -375,6 +381,12 @@ func TestServiceMetrics_RevokeSession(t *testing.T) {
 	}
 	if got := metricValueWithLabels(families, "asb_artifacts_active", map[string]string{"connector_kind": "github"}); got != 0 {
 		t.Fatalf("active github artifacts = %v, want 0", got)
+	}
+	if got := metricValueWithLabels(families, "asb_connector_operations_total", map[string]string{"connector_kind": "github", "operation": "revoke", "outcome": "success"}); got != 1 {
+		t.Fatalf("github revoke connector ops = %v, want 1", got)
+	}
+	if got := histogramCountWithLabels(families, "asb_connector_operation_seconds", map[string]string{"connector_kind": "github", "operation": "revoke"}); got != 1 {
+		t.Fatalf("github revoke connector latency count = %d, want 1", got)
 	}
 	grant, err := repo.GetGrant(ctx, grantResp.GrantID)
 	if err != nil {
@@ -776,6 +788,103 @@ func TestServiceMetrics_UnwrapArtifact(t *testing.T) {
 	}
 	if got := metricValueWithLabels(families, "asb_artifact_unwraps_total", map[string]string{"connector_kind": "vaultdb"}); got != 1 {
 		t.Fatalf("vaultdb unwrap count = %v, want 1", got)
+	}
+}
+
+func TestServiceMetrics_ExecuteGitHubProxy(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	now := testNow()
+	registry := prometheus.NewRegistry()
+	metrics, err := app.NewMetrics("asb", app.MetricsOptions{
+		Registerer: registry,
+	})
+	if err != nil {
+		t.Fatalf("NewMetrics() error = %v", err)
+	}
+
+	repo := memstore.NewRepository()
+	runtimeStore := memstore.NewRuntimeStore()
+	svc, err := app.NewService(app.Config{
+		Clock:         fixedClock(now),
+		Metrics:       metrics,
+		Repository:    repo,
+		Verifier:      fakeVerifier{identity: workloadIdentity()},
+		SessionTokens: mustNewSigner(t),
+		Policy:        stubPolicyEngine{},
+		Tools:         stubToolRegistry{},
+		Connectors:    fakeConnectorResolver{connector: &fakeConnector{kind: "github"}},
+		Runtime:       runtimeStore,
+		GitHubProxy:   &fakeGitHubProxyExecutor{payload: []byte(`{"files":[]}`)},
+	})
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	session := &core.Session{
+		ID:        "sess_proxy_metrics",
+		TenantID:  "t_acme",
+		AgentID:   "agent_pr_reviewer",
+		RunID:     "run_proxy_metrics",
+		State:     core.SessionStateActive,
+		ExpiresAt: now.Add(10 * time.Minute),
+		CreatedAt: now,
+	}
+	artifactID := "art_proxy_metrics"
+	grant := &core.Grant{
+		ID:          "gr_proxy_metrics",
+		TenantID:    "t_acme",
+		SessionID:   session.ID,
+		Tool:        "github",
+		Capability:  "repo.read",
+		ResourceRef: "github:repo:acme/widgets",
+		State:       core.GrantStateIssued,
+		ArtifactRef: &artifactID,
+		CreatedAt:   now,
+		ExpiresAt:   now.Add(10 * time.Minute),
+	}
+	artifact := &core.Artifact{
+		ID:            artifactID,
+		TenantID:      "t_acme",
+		SessionID:     session.ID,
+		GrantID:       grant.ID,
+		Handle:        "ph_proxy_metrics",
+		Kind:          core.ArtifactKindProxyHandle,
+		ConnectorKind: "github",
+		State:         core.ArtifactStateIssued,
+		ExpiresAt:     now.Add(10 * time.Minute),
+		CreatedAt:     now,
+		Metadata: map[string]string{
+			"operations": "pull_request_files",
+		},
+	}
+	if err := repo.SaveSession(ctx, session); err != nil {
+		t.Fatalf("SaveSession() error = %v", err)
+	}
+	if err := repo.SaveGrant(ctx, grant); err != nil {
+		t.Fatalf("SaveGrant() error = %v", err)
+	}
+	if err := repo.SaveArtifact(ctx, artifact); err != nil {
+		t.Fatalf("SaveArtifact() error = %v", err)
+	}
+	if err := runtimeStore.RegisterProxyHandle(ctx, artifact.Handle, core.ProxyBudget{}, artifact.ExpiresAt); err != nil {
+		t.Fatalf("RegisterProxyHandle() error = %v", err)
+	}
+
+	if _, err := svc.ExecuteGitHubProxy(ctx, &core.ExecuteGitHubProxyRequest{
+		ProxyHandle: artifact.Handle,
+		Operation:   "pull_request_files",
+	}); err != nil {
+		t.Fatalf("ExecuteGitHubProxy() error = %v", err)
+	}
+
+	families := mustGatherMetrics(t, registry)
+	if got := metricValueWithLabels(families, "asb_connector_operations_total", map[string]string{"connector_kind": "github", "operation": "pull_request_files", "outcome": "success"}); got != 1 {
+		t.Fatalf("github proxy connector ops = %v, want 1", got)
+	}
+	if got := histogramCountWithLabels(families, "asb_connector_operation_seconds", map[string]string{"connector_kind": "github", "operation": "pull_request_files"}); got != 1 {
+		t.Fatalf("github proxy connector latency count = %d, want 1", got)
 	}
 }
 

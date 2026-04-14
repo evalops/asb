@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/evalops/asb/internal/core"
 )
@@ -178,12 +179,15 @@ func (s *Service) transitionGrantState(ctx context.Context, session *core.Sessio
 		if err != nil {
 			return fmt.Errorf("transition grant %q to %q: resolve connector: %w", grant.ID, state, err)
 		}
-		if err := connector.Revoke(ctx, core.RevokeRequest{
+		startedAt := time.Now()
+		err = connector.Revoke(ctx, core.RevokeRequest{
 			Session:  session,
 			Grant:    grant,
 			Artifact: artifact,
 			Reason:   reason,
-		}); err != nil {
+		})
+		s.metrics.recordConnectorOperation(connector.Kind(), "revoke", time.Since(startedAt), err)
+		if err != nil {
 			return fmt.Errorf("transition grant %q to %q: revoke connector state: %w", grant.ID, state, err)
 		}
 	}

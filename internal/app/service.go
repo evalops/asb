@@ -535,7 +535,9 @@ func (s *Service) ExecuteGitHubProxy(ctx context.Context, req *core.ExecuteGitHu
 		}()
 	}
 
+	startedAt := time.Now()
 	payload, err := s.githubProxy.Execute(ctx, artifact, req.Operation, req.Params)
+	s.metrics.recordConnectorOperation(artifact.ConnectorKind, req.Operation, time.Since(startedAt), err)
 	responseBytes = int64(len(payload))
 	if err != nil {
 		return nil, fmt.Errorf("execute github proxy %q operation %q: execute upstream request: %w", req.ProxyHandle, req.Operation, err)
@@ -698,11 +700,13 @@ func (s *Service) UnwrapArtifact(ctx context.Context, req *core.UnwrapArtifactRe
 }
 
 func (s *Service) issueGrant(ctx context.Context, session *core.Session, grant *core.Grant, resource core.ResourceDescriptor, connector core.Connector) (*core.RequestGrantResponse, error) {
+	startedAt := time.Now()
 	artifact, err := connector.Issue(ctx, core.IssueRequest{
 		Session:  session,
 		Grant:    grant,
 		Resource: resource,
 	})
+	s.metrics.recordConnectorOperation(connector.Kind(), "issue", time.Since(startedAt), err)
 	if err != nil {
 		return nil, fmt.Errorf("issue grant %q: connector %q issue: %w", grant.ID, connector.Kind(), err)
 	}

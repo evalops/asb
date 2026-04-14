@@ -19,16 +19,18 @@ type MetricsOptions struct {
 
 // Metrics records ASB domain-level counters, gauges, and histograms.
 type Metrics struct {
-	sessionsActive  *prometheus.GaugeVec
-	sessionsTotal   *prometheus.CounterVec
-	grantsTotal     *prometheus.CounterVec
-	grantTTL        prometheus.Histogram
-	approvalsTotal  *prometheus.CounterVec
-	approvalWait    *prometheus.HistogramVec
-	policyEval      *prometheus.CounterVec
-	budgetExhaust   *prometheus.CounterVec
-	artifactsActive *prometheus.GaugeVec
-	artifactUnwraps *prometheus.CounterVec
+	sessionsActive   *prometheus.GaugeVec
+	sessionsTotal    *prometheus.CounterVec
+	grantsTotal      *prometheus.CounterVec
+	grantTTL         prometheus.Histogram
+	approvalsTotal   *prometheus.CounterVec
+	approvalWait     *prometheus.HistogramVec
+	policyEval       *prometheus.CounterVec
+	budgetExhaust    *prometheus.CounterVec
+	artifactsActive  *prometheus.GaugeVec
+	artifactUnwraps  *prometheus.CounterVec
+	connectorOps     *prometheus.CounterVec
+	connectorLatency *prometheus.HistogramVec
 }
 
 // NewMetrics creates Prometheus collectors for ASB domain metrics.
@@ -177,17 +179,48 @@ func NewMetrics(serviceName string, opts MetricsOptions) (*Metrics, error) {
 		return nil, err
 	}
 
+	connectorOps, err := registerCounterVec(
+		opts.Registerer,
+		prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: prefix + "_connector_operations_total",
+				Help: "Count of ASB connector operations by connector kind, operation, and outcome.",
+			},
+			[]string{"connector_kind", "operation", "outcome"},
+		),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	connectorLatency, err := registerHistogramVec(
+		opts.Registerer,
+		prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    prefix + "_connector_operation_seconds",
+				Help:    "Latency of ASB connector operations by connector kind and operation.",
+				Buckets: prometheus.DefBuckets,
+			},
+			[]string{"connector_kind", "operation"},
+		),
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Metrics{
-		sessionsActive:  sessionsActive,
-		sessionsTotal:   sessionsTotal,
-		grantsTotal:     grantsTotal,
-		grantTTL:        grantTTL,
-		approvalsTotal:  approvalsTotal,
-		approvalWait:    approvalWait,
-		policyEval:      policyEval,
-		budgetExhaust:   budgetExhaust,
-		artifactsActive: artifactsActive,
-		artifactUnwraps: artifactUnwraps,
+		sessionsActive:   sessionsActive,
+		sessionsTotal:    sessionsTotal,
+		grantsTotal:      grantsTotal,
+		grantTTL:         grantTTL,
+		approvalsTotal:   approvalsTotal,
+		approvalWait:     approvalWait,
+		policyEval:       policyEval,
+		budgetExhaust:    budgetExhaust,
+		artifactsActive:  artifactsActive,
+		artifactUnwraps:  artifactUnwraps,
+		connectorOps:     connectorOps,
+		connectorLatency: connectorLatency,
 	}, nil
 }
 
@@ -297,6 +330,20 @@ func (metrics *Metrics) recordArtifactUnwrap(connectorKind string) {
 		return
 	}
 	metrics.artifactUnwraps.WithLabelValues(labelOrUnknown(connectorKind)).Inc()
+}
+
+func (metrics *Metrics) recordConnectorOperation(connectorKind string, operation string, duration time.Duration, err error) {
+	if metrics == nil {
+		return
+	}
+	outcome := "success"
+	if err != nil {
+		outcome = "error"
+	}
+	connectorKind = labelOrUnknown(connectorKind)
+	operation = labelOrUnknown(operation)
+	metrics.connectorOps.WithLabelValues(connectorKind, operation, outcome).Inc()
+	metrics.connectorLatency.WithLabelValues(connectorKind, operation).Observe(duration.Seconds())
 }
 
 func labelOrUnknown(value string) string {
