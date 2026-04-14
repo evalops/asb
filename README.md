@@ -60,6 +60,7 @@ ASB currently supports:
 - GitHub proxy access through allowlisted operations, including GitHub App installation-token exchange
 - Vault-backed dynamic Postgres credential brokering delivered as wrapped artifacts
 - browser relay registration with single-use unwrap responses and selector-bound fill data
+- shared notifications-service delivery for pending approval events
 - JSON/HTTP and ConnectRPC transports
 - in-memory, Postgres, and Redis-backed storage and runtime components
 - migration and cleanup worker binaries
@@ -67,7 +68,7 @@ ASB currently supports:
 
 ### Intentionally simplified in v1
 
-- no full production approval callback transport yet (approvals work, but notification is in-process only)
+- no full production approval callback transport yet (pending approvals can be emitted through the shared notifications service, but approver routing is still runtime-configured)
 - no KMS-backed artifact encryption yet (artifacts are stored, but not envelope-encrypted at rest)
 - no frontend admin UI or browser extension package in this repo yet
 - minted-token delivery is modeled in the domain but not enabled in runtime wiring
@@ -263,6 +264,12 @@ Flags: `-interval` (default 30s), `-limit` (default 100 per pass), `-once` (sing
 | `ASB_BROWSER_PASSWORD` | Browser credential password (demo) |
 | `ASB_BROWSER_SELECTOR_USERNAME` | CSS selector for username field (demo) |
 | `ASB_BROWSER_SELECTOR_PASSWORD` | CSS selector for password field (demo) |
+| `ASB_NOTIFICATIONS_BASE_URL` | Shared notifications service base URL for pending approval delivery |
+| `ASB_NOTIFICATIONS_RECIPIENT_ID` | Recipient or queue ID for approval notifications |
+| `ASB_NOTIFICATIONS_CHANNEL` | Delivery channel for approval notifications (`slack`, `email`, `webhook`, `in_app`) |
+| `ASB_NOTIFICATIONS_WORKSPACE_ID` | Workspace override for approval notifications (defaults to approval tenant ID) |
+| `ASB_NOTIFICATIONS_BEARER_TOKEN` | Optional bearer token forwarded to the notifications service |
+| `ASB_PUBLIC_BASE_URL` | Optional public ASB base URL used to embed approve/deny endpoints in notification metadata |
 
 ## Local development
 
@@ -292,6 +299,10 @@ make run-api
 curl http://localhost:8080/healthz
 curl http://localhost:8080/readyz
 ```
+
+### Shared approval notifications
+
+If `ASB_NOTIFICATIONS_BASE_URL`, `ASB_NOTIFICATIONS_RECIPIENT_ID`, and `ASB_NOTIFICATIONS_CHANNEL` are set, pending approvals are sent through the shared `notifications` service with structured metadata for `approval_id`, `grant_id`, `tenant_id`, `tool`, `capability`, `resource_ref`, and expiration details. When `ASB_PUBLIC_BASE_URL` is set, ASB also includes approve/deny endpoint hints in that metadata for downstream tooling.
 
 ## Testing
 

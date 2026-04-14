@@ -12,9 +12,11 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/evalops/asb/internal/app"
+	approvalnotifications "github.com/evalops/asb/internal/approval/notifications"
 	auditmemory "github.com/evalops/asb/internal/audit/memory"
 	"github.com/evalops/asb/internal/authn/delegationjwt"
 	"github.com/evalops/asb/internal/authn/k8s"
@@ -112,6 +114,12 @@ func NewServiceRuntime(ctx context.Context, logger *slog.Logger, options ...Serv
 	}
 
 	githubProxy, err := newGitHubProxyExecutor()
+	if err != nil {
+		cleanupRuntime()
+		cleanupRepository()
+		return nil, err
+	}
+	approvalNotifier, err := newApprovalNotifier()
 	if err != nil {
 		cleanupRuntime()
 		cleanupRepository()
@@ -236,9 +244,10 @@ func NewServiceRuntime(ctx context.Context, logger *slog.Logger, options ...Serv
 			core.DeliveryModeProxy:         proxydelivery.NewAdapter(),
 			core.DeliveryModeWrappedSecret: wrappeddelivery.NewAdapter(),
 		},
-		Audit:       auditSink,
-		Runtime:     runtimeStore,
-		GitHubProxy: githubProxy,
+		Audit:            auditSink,
+		Runtime:          runtimeStore,
+		ApprovalNotifier: approvalNotifier,
+		GitHubProxy:      githubProxy,
 	})
 	if err != nil {
 		cleanupRuntime()
@@ -405,6 +414,36 @@ func newGitHubProxyExecutor() (core.GitHubProxyExecutor, error) {
 		BaseURL:     getenv("ASB_GITHUB_API_BASE_URL", "https://api.github.com"),
 		TokenSource: tokenSource,
 	}), nil
+}
+
+func newApprovalNotifier() (core.ApprovalNotifier, error) {
+	baseURL := strings.TrimSpace(os.Getenv("ASB_NOTIFICATIONS_BASE_URL"))
+	recipientID := strings.TrimSpace(os.Getenv("ASB_NOTIFICATIONS_RECIPIENT_ID"))
+	channelRaw := strings.TrimSpace(os.Getenv("ASB_NOTIFICATIONS_CHANNEL"))
+	workspaceID := strings.TrimSpace(os.Getenv("ASB_NOTIFICATIONS_WORKSPACE_ID"))
+	bearerToken := strings.TrimSpace(os.Getenv("ASB_NOTIFICATIONS_BEARER_TOKEN"))
+	publicBaseURL := strings.TrimSpace(os.Getenv("ASB_PUBLIC_BASE_URL"))
+
+	if baseURL == "" {
+		if recipientID != "" || channelRaw != "" || workspaceID != "" || bearerToken != "" || publicBaseURL != "" {
+			return nil, fmt.Errorf("ASB_NOTIFICATIONS_BASE_URL is required when approval notifications are configured")
+		}
+		return nil, nil
+	}
+
+	channel, err := approvalnotifications.ParseChannel(channelRaw)
+	if err != nil {
+		return nil, fmt.Errorf("parse ASB_NOTIFICATIONS_CHANNEL: %w", err)
+	}
+
+	return approvalnotifications.NewNotifier(approvalnotifications.Config{
+		BaseURL:       baseURL,
+		BearerToken:   bearerToken,
+		WorkspaceID:   workspaceID,
+		RecipientID:   recipientID,
+		Channel:       channel,
+		PublicBaseURL: publicBaseURL,
+	})
 }
 
 func newRepository(ctx context.Context) (core.Repository, func(), readinessProbe, error) {
