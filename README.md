@@ -302,11 +302,16 @@ make run-api
 ```bash
 curl http://localhost:8080/healthz
 curl http://localhost:8080/readyz
+curl http://localhost:8080/metrics
 ```
 
 ### HTTP rate limiting
 
 The JSON API now applies per-IP rate limiting through the shared `service-runtime/ratelimit` middleware. Health and metrics endpoints remain exempt. Defaults are tuned for internal service traffic and can be overridden with the `ASB_HTTP_RATE_LIMIT_*` env vars above.
+
+### Metrics
+
+ASB now exposes Prometheus metrics on `/metrics` through the shared `service-runtime/observability` package. The initial slice covers HTTP request counters and request-latency histograms across the broker entrypoints.
 
 ### Shared approval notifications
 
