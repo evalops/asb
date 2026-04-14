@@ -5,6 +5,7 @@ go 1.24.0
 require (
 	connectrpc.com/connect v1.19.1
 	github.com/alicebob/miniredis/v2 v2.37.0
+	github.com/evalops/proto v0.0.0-20260414000509-37b2bf5d6244
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/pashagolub/pgxmock/v4 v4.9.0
