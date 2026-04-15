@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/evalops/asb/internal/core"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type Config struct {

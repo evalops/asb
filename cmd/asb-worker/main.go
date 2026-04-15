@@ -62,8 +62,9 @@ func main() {
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", promhttp.Handler())
 		metricsServer = &http.Server{
-			Addr:    metricsAddr,
-			Handler: mux,
+			Addr:              metricsAddr,
+			Handler:           mux,
+			ReadHeaderTimeout: 5 * time.Second,
 		}
 		go func() {
 			if err := metricsServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

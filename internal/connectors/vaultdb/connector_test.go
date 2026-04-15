@@ -16,7 +16,8 @@ func TestConnector_IssueAndRevokeDynamicCredentials(t *testing.T) {
 
 	client := &fakeVaultClient{
 		lease: &vaultdb.LeaseCredentials{
-			Username:      "v-token-user",
+			Username: "v-token-user",
+			// #nosec G101 -- Synthetic password fixture exercises DSN escaping.
 			Password:      "secret:/?#[]@",
 			LeaseID:       "database/creds/analytics_ro/123",
 			LeaseDuration: 10 * time.Minute,

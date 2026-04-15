@@ -54,6 +54,7 @@ func Discover(dir string) ([]Migration, error) {
 			return nil, fmt.Errorf("invalid migration filename %q", entry.Name())
 		}
 		path := filepath.Join(dir, entry.Name())
+		// #nosec G304 -- Paths come from the filtered migration directory listing.
 		contents, err := os.ReadFile(path)
 		if err != nil {
 			return nil, err

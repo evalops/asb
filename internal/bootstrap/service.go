@@ -615,6 +615,7 @@ func redisPoolStats(client *goredis.Client) func() *goredis.PoolStats {
 }
 
 func loadPublicKey(path string) (any, error) {
+	// #nosec G304,G703 -- Public-key paths come from explicit operator configuration.
 	contents, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -647,6 +648,7 @@ func loadEd25519PublicKey(path string) (ed25519.PublicKey, error) {
 }
 
 func loadEd25519PrivateKey(path string) (ed25519.PrivateKey, error) {
+	// #nosec G304,G703 -- Private-key paths come from explicit operator configuration.
 	contents, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -667,6 +669,7 @@ func loadEd25519PrivateKey(path string) (ed25519.PrivateKey, error) {
 }
 
 func loadRSAPrivateKey(path string) (*rsa.PrivateKey, error) {
+	// #nosec G304,G703 -- Private-key paths come from explicit operator configuration.
 	contents, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err

@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/evalops/asb/internal/authn/k8s"
 	"github.com/evalops/asb/internal/core"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func TestVerifier_VerifyProjectedServiceAccountToken(t *testing.T) {

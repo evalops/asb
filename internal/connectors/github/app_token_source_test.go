@@ -31,7 +31,11 @@ func TestAppTokenSource_TokenForRepoUsesInstallationTokenAndCaches(t *testing.T)
 	tokenRequests := 0
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		claims := parseAppJWT(t, privateKey.Public().(*rsa.PublicKey), r.Header.Get("Authorization"))
+		publicKey, ok := privateKey.Public().(*rsa.PublicKey)
+		if !ok {
+			t.Fatalf("public key = %T, want *rsa.PublicKey", privateKey.Public())
+		}
+		claims := parseAppJWT(t, publicKey, r.Header.Get("Authorization"))
 		if claims.Issuer != "123" {
 			t.Fatalf("issuer = %q, want 123", claims.Issuer)
 		}
@@ -170,8 +174,10 @@ func TestAppTokenSource_TokenForRepoRefreshesWhenTokenNearExpiry(t *testing.T) {
 			_, _ = w.Write([]byte(`{"id":987}`))
 		case "/app/installations/987/access_tokens":
 			tokenRequests++
+			// #nosec G101 -- Synthetic installation tokens for cache refresh tests.
 			tokenValue := "inst-token-1"
 			if tokenRequests > 1 {
+				// #nosec G101 -- Synthetic installation tokens for cache refresh tests.
 				tokenValue = "inst-token-2"
 			}
 			_, _ = w.Write([]byte(`{"token":"` + tokenValue + `","expires_at":"` + now.Add(6*time.Minute).Format(time.RFC3339) + `"}`))
