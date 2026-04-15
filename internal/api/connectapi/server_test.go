@@ -161,7 +161,8 @@ func TestServer_CreateSessionAcceptsOIDCAttestationKind(t *testing.T) {
 				t.Fatalf("unexpected attestation = %#v", req.Attestation)
 			}
 			return &core.CreateSessionResponse{
-				SessionID:    "sess_oidc",
+				SessionID: "sess_oidc",
+				// #nosec G101 -- Synthetic session token fixture for transport tests.
 				SessionToken: "eyJ.oidc",
 				ExpiresAt:    time.Date(2026, 4, 15, 6, 0, 0, 0, time.UTC),
 			}, nil

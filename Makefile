@@ -1,6 +1,7 @@
-GO ?= go
+TOOLCHAIN ?= go1.26.2
+GO ?= env GOTOOLCHAIN=$(TOOLCHAIN) go
 
-.PHONY: fmt test vet lint install-hooks proto proto-check migrate run-api run-worker
+.PHONY: fmt test test-race vet lint security-scan coverage install-hooks proto proto-check migrate run-api run-worker
 
 fmt:
 	$(GO) fmt ./...
@@ -8,10 +9,22 @@ fmt:
 test:
 	$(GO) test ./...
 
+test-race:
+	$(GO) test -race ./...
+
 vet:
 	$(GO) vet ./...
 
-lint: vet
+lint:
+	golangci-lint run ./...
+
+security-scan:
+	$(GO) mod verify
+	gosec ./cmd/... ./internal/...
+	env GOTOOLCHAIN=$(TOOLCHAIN) govulncheck ./...
+
+coverage:
+	$(GO) test ./... -coverprofile=coverage.out -covermode=atomic
 
 proto:
 	bash scripts/sync-proto.sh

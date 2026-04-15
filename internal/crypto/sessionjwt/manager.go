@@ -28,7 +28,10 @@ func NewManager(privateKey ed25519.PrivateKey) (*Manager, error) {
 	if len(privateKey) == 0 {
 		return nil, fmt.Errorf("%w: private key is required", core.ErrInvalidRequest)
 	}
-	publicKey := privateKey.Public().(ed25519.PublicKey)
+	publicKey, ok := privateKey.Public().(ed25519.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("%w: private key public component is %T, want ed25519.PublicKey", core.ErrInvalidRequest, privateKey.Public())
+	}
 	return &Manager{
 		privateKey: privateKey,
 		publicKey:  publicKey,

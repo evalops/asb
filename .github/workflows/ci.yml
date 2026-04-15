@@ -7,7 +7,7 @@ on:
   pull_request:
 
 jobs:
-  test:
+  proto:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -16,9 +16,9 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Go
-        uses: evalops/service-runtime/.github/actions/setup-go-service@ca09da8302203b96582332dbcababe9f2d906d10
+        uses: evalops/service-runtime/.github/actions/setup-go-service@cac5638c2935870453cf669e803936a80e17ac7b
         with:
-          go-version-file: go.mod
+          go-version: "1.26.2"
           cache: true
 
       - name: Setup Buf
@@ -32,7 +32,9 @@ jobs:
           go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.19.1
 
       - name: Format
-        run: make fmt
+        run: |
+          make fmt
+          git diff --exit-code
 
       - name: Buf lint
         run: buf lint
@@ -50,8 +52,75 @@ jobs:
       - name: Verify Proto Sync
         run: make proto-check
 
-      - name: Vet
-        run: go vet ./...
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
 
-      - name: Test
-        run: make test
+      - name: Setup Go
+        uses: evalops/service-runtime/.github/actions/setup-go-service@cac5638c2935870453cf669e803936a80e17ac7b
+        with:
+          go-version: "1.26.2"
+          cache: true
+          run-go-test: "true"
+          go-test-race: "true"
+          go-test-args: "./... -count=1"
+
+      - name: Build
+        run: go build ./...
+
+      - name: Collect coverage
+        id: coverage
+        run: |
+          go test ./... -coverprofile=coverage.out -covermode=atomic -count=1
+          coverage="$(go tool cover -func=coverage.out | awk '/^total:/ {sub(/%/, "", $3); print $3}')"
+          echo "value=${coverage}" >> "$GITHUB_OUTPUT"
+          awk -v got="${coverage}" -v floor="40" 'BEGIN { if ((got + 0) < (floor + 0)) exit 1 }'
+
+      - name: Publish coverage summary
+        run: |
+          echo "Total coverage: ${{ steps.coverage.outputs.value }}%" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage.out
+          path: coverage.out
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: evalops/service-runtime/.github/actions/setup-go-service@cac5638c2935870453cf669e803936a80e17ac7b
+        with:
+          go-version: "1.26.2"
+          cache: true
+          run-golangci-lint: "true"
+          golangci-lint-args: "--timeout=5m ./..."
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: evalops/service-runtime/.github/actions/setup-go-service@cac5638c2935870453cf669e803936a80e17ac7b
+        with:
+          go-version: "1.26.2"
+          cache: true
+          run-gosec: "true"
+          run-govulncheck: "true"
+
+      - name: Verify module checksums
+        run: go mod verify

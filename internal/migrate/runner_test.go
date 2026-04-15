@@ -62,7 +62,7 @@ func TestRunner_UpAppliesPendingMigrations(t *testing.T) {
 
 func writeMigration(t *testing.T, dir string, name string, contents string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, name), []byte(contents), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(contents), 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 }
