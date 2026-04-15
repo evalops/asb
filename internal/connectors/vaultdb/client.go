@@ -11,20 +11,23 @@ import (
 	"time"
 
 	"github.com/evalops/asb/internal/core"
+	"github.com/evalops/service-runtime/resilience"
 )
 
 type HTTPClientConfig struct {
-	BaseURL   string
-	Token     string
-	Namespace string
-	Client    *http.Client
+	BaseURL     string
+	Token       string
+	Namespace   string
+	Client      *http.Client
+	RevokeRetry resilience.RetryConfig
 }
 
 type HTTPClient struct {
-	baseURL   string
-	token     string
-	namespace string
-	client    *http.Client
+	baseURL     string
+	token       string
+	namespace   string
+	client      *http.Client
+	revokeRetry resilience.RetryConfig
 }
 
 func NewHTTPClient(cfg HTTPClientConfig) *HTTPClient {
@@ -32,11 +35,22 @@ func NewHTTPClient(cfg HTTPClientConfig) *HTTPClient {
 	if client == nil {
 		client = http.DefaultClient
 	}
+	revokeRetry := cfg.RevokeRetry
+	if revokeRetry.MaxAttempts == 0 {
+		revokeRetry.MaxAttempts = 4
+	}
+	if revokeRetry.InitialDelay == 0 {
+		revokeRetry.InitialDelay = 100 * time.Millisecond
+	}
+	if revokeRetry.MaxDelay == 0 {
+		revokeRetry.MaxDelay = time.Second
+	}
 	return &HTTPClient{
-		baseURL:   strings.TrimRight(cfg.BaseURL, "/"),
-		token:     cfg.Token,
-		namespace: cfg.Namespace,
-		client:    client,
+		baseURL:     strings.TrimRight(cfg.BaseURL, "/"),
+		token:       cfg.Token,
+		namespace:   cfg.Namespace,
+		client:      client,
+		revokeRetry: revokeRetry,
 	}
 }
 
@@ -80,13 +94,19 @@ func (c *HTTPClient) GenerateCredentials(ctx context.Context, role string) (*Lea
 }
 
 func (c *HTTPClient) RevokeLease(ctx context.Context, leaseID string) error {
+	return resilience.Retry(ctx, c.revokeRetry, func(ctx context.Context) error {
+		return c.revokeLeaseOnce(ctx, leaseID)
+	})
+}
+
+func (c *HTTPClient) revokeLeaseOnce(ctx context.Context, leaseID string) error {
 	body, err := json.Marshal(map[string]string{"lease_id": leaseID})
 	if err != nil {
-		return err
+		return resilience.Permanent(err)
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPut, c.baseURL+"/v1/sys/leases/revoke", bytes.NewReader(body))
 	if err != nil {
-		return err
+		return resilience.Permanent(err)
 	}
 	c.applyHeaders(request)
 	request.Header.Set("Content-Type", "application/json")
@@ -101,7 +121,11 @@ func (c *HTTPClient) RevokeLease(ctx context.Context, leaseID string) error {
 		return err
 	}
 	if response.StatusCode >= 400 {
-		return fmt.Errorf("%w: vault revoke lease returned %d: %s", core.ErrForbidden, response.StatusCode, string(payload))
+		wrapped := fmt.Errorf("%w: vault revoke lease returned %d: %s", core.ErrForbidden, response.StatusCode, string(payload))
+		if response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= http.StatusInternalServerError {
+			return wrapped
+		}
+		return resilience.Permanent(wrapped)
 	}
 	return nil
 }

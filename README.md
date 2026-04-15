@@ -262,6 +262,7 @@ Flags: `-interval` (default 30s), `-limit` (default 100 per pass), `-once` (sing
 | `ASB_VAULT_TOKEN` | Vault authentication token |
 | `ASB_VAULT_NAMESPACE` | Vault namespace |
 | `ASB_VAULT_ROLE` | Vault DB role name |
+| `ASB_VAULT_ALLOWED_ROLE_SUFFIXES` | Comma-separated allowed Vault DB role suffixes (default `_ro`) |
 | `ASB_VAULT_DSN_TEMPLATE` | DSN template for rendered credentials |
 | `ASB_BROWSER_ORIGIN` | Allowed browser origin (demo) |
 | `ASB_BROWSER_USERNAME` | Browser credential username (demo) |
