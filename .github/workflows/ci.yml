@@ -43,7 +43,6 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           if git show origin/main:buf.yaml >/dev/null 2>&1; then
-            git fetch origin main:refs/remotes/origin/main
             buf breaking --against '.git#ref=refs/remotes/origin/main'
           else
             echo "Skipping: no buf.yaml on main yet"
