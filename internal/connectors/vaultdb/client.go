@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -19,6 +20,7 @@ type HTTPClientConfig struct {
 	Token       string
 	Namespace   string
 	Client      *http.Client
+	RenewRetry  resilience.RetryConfig
 	RevokeRetry resilience.RetryConfig
 }
 
@@ -27,6 +29,7 @@ type HTTPClient struct {
 	token       string
 	namespace   string
 	client      *http.Client
+	renewRetry  resilience.RetryConfig
 	revokeRetry resilience.RetryConfig
 }
 
@@ -45,11 +48,22 @@ func NewHTTPClient(cfg HTTPClientConfig) *HTTPClient {
 	if revokeRetry.MaxDelay == 0 {
 		revokeRetry.MaxDelay = time.Second
 	}
+	renewRetry := cfg.RenewRetry
+	if renewRetry.MaxAttempts == 0 {
+		renewRetry.MaxAttempts = 3
+	}
+	if renewRetry.InitialDelay == 0 {
+		renewRetry.InitialDelay = 100 * time.Millisecond
+	}
+	if renewRetry.MaxDelay == 0 {
+		renewRetry.MaxDelay = time.Second
+	}
 	return &HTTPClient{
 		baseURL:     strings.TrimRight(cfg.BaseURL, "/"),
 		token:       cfg.Token,
 		namespace:   cfg.Namespace,
 		client:      client,
+		renewRetry:  renewRetry,
 		revokeRetry: revokeRetry,
 	}
 }
@@ -79,6 +93,7 @@ func (c *HTTPClient) GenerateCredentials(ctx context.Context, role string) (*Lea
 	var payload struct {
 		LeaseID       string `json:"lease_id"`
 		LeaseDuration int64  `json:"lease_duration"`
+		Renewable     bool   `json:"renewable"`
 		Data          struct {
 			Username string `json:"username"`
 			Password string `json:"password"`
@@ -92,13 +107,69 @@ func (c *HTTPClient) GenerateCredentials(ctx context.Context, role string) (*Lea
 		Password:      payload.Data.Password,
 		LeaseID:       payload.LeaseID,
 		LeaseDuration: time.Duration(payload.LeaseDuration) * time.Second,
+		Renewable:     payload.Renewable,
 	}, nil
+}
+
+func (c *HTTPClient) RenewLease(ctx context.Context, leaseID string, increment time.Duration) (*LeaseCredentials, error) {
+	return resilience.RetryValue(ctx, c.renewRetry, func(ctx context.Context) (*LeaseCredentials, error) {
+		return c.renewLeaseOnce(ctx, leaseID, increment)
+	})
 }
 
 func (c *HTTPClient) RevokeLease(ctx context.Context, leaseID string) error {
 	return resilience.Retry(ctx, c.revokeRetry, func(ctx context.Context) error {
 		return c.revokeLeaseOnce(ctx, leaseID)
 	})
+}
+
+func (c *HTTPClient) renewLeaseOnce(ctx context.Context, leaseID string, increment time.Duration) (*LeaseCredentials, error) {
+	payload, err := json.Marshal(map[string]any{
+		"lease_id":  leaseID,
+		"increment": int(math.Ceil(increment.Seconds())),
+	})
+	if err != nil {
+		return nil, resilience.Permanent(err)
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/sys/leases/renew", bytes.NewReader(payload))
+	if err != nil {
+		return nil, resilience.Permanent(err)
+	}
+	c.applyHeaders(request)
+	request.Header.Set("Content-Type", "application/json")
+
+	response, err := c.client.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = response.Body.Close()
+	}()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, err
+	}
+	if response.StatusCode >= 400 {
+		wrapped := fmt.Errorf("%w: vault renew lease returned %d: %s", core.ErrForbidden, response.StatusCode, string(body))
+		if response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= http.StatusInternalServerError {
+			return nil, wrapped
+		}
+		return nil, resilience.Permanent(wrapped)
+	}
+
+	var renewed struct {
+		LeaseID       string `json:"lease_id"`
+		LeaseDuration int64  `json:"lease_duration"`
+		Renewable     bool   `json:"renewable"`
+	}
+	if err := json.Unmarshal(body, &renewed); err != nil {
+		return nil, resilience.Permanent(err)
+	}
+	return &LeaseCredentials{
+		LeaseID:       renewed.LeaseID,
+		LeaseDuration: time.Duration(renewed.LeaseDuration) * time.Second,
+		Renewable:     renewed.Renewable,
+	}, nil
 }
 
 func (c *HTTPClient) revokeLeaseOnce(ctx context.Context, leaseID string) error {

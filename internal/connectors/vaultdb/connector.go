@@ -16,10 +16,12 @@ type LeaseCredentials struct {
 	Password      string
 	LeaseID       string
 	LeaseDuration time.Duration
+	Renewable     bool
 }
 
 type Client interface {
 	GenerateCredentials(ctx context.Context, role string) (*LeaseCredentials, error)
+	RenewLease(ctx context.Context, leaseID string, increment time.Duration) (*LeaseCredentials, error)
 	RevokeLease(ctx context.Context, leaseID string) error
 }
 
@@ -117,6 +119,10 @@ func (c *Connector) Issue(ctx context.Context, req core.IssueRequest) (*core.Iss
 	if err != nil {
 		return nil, err
 	}
+	lease, leaseExpiresAt, err := c.extendLeaseForGrant(ctx, lease, req.Grant.ExpiresAt)
+	if err != nil {
+		return nil, err
+	}
 	dsn, err := renderDSN(c.roleDSNs[req.Resource.Name], lease)
 	if err != nil {
 		return nil, err
@@ -125,16 +131,17 @@ func (c *Connector) Issue(ctx context.Context, req core.IssueRequest) (*core.Iss
 	return &core.IssuedArtifact{
 		Kind: core.ArtifactKindWrappedSecret,
 		Metadata: map[string]string{
-			"artifact_id": "art_" + req.Grant.ID,
-			"lease_id":    lease.LeaseID,
-			"db_role":     req.Resource.Name,
+			"artifact_id":      "art_" + req.Grant.ID,
+			"lease_id":         lease.LeaseID,
+			"lease_expires_at": leaseExpiresAt.UTC().Format(time.RFC3339),
+			"db_role":          req.Resource.Name,
 		},
 		SecretData: map[string]string{
 			"username": lease.Username,
 			"password": lease.Password,
 			"dsn":      dsn,
 		},
-		ExpiresAt: minTime(req.Grant.ExpiresAt, time.Now().Add(lease.LeaseDuration)),
+		ExpiresAt: minTime(req.Grant.ExpiresAt, leaseExpiresAt),
 	}, nil
 }
 
@@ -201,6 +208,50 @@ func renderDSN(renderPattern string, lease *LeaseCredentials) (string, error) {
 		return "", fmt.Errorf("%w: render dsn template: %v", core.ErrInvalidRequest, err)
 	}
 	return builder.String(), nil
+}
+
+func (c *Connector) extendLeaseForGrant(ctx context.Context, lease *LeaseCredentials, grantExpiresAt time.Time) (*LeaseCredentials, time.Time, error) {
+	now := time.Now()
+	leaseExpiresAt := now.Add(lease.LeaseDuration)
+	if grantExpiresAt.IsZero() || !grantExpiresAt.After(leaseExpiresAt) {
+		return lease, leaseExpiresAt, nil
+	}
+	if lease.LeaseID == "" || !lease.Renewable {
+		return nil, time.Time{}, fmt.Errorf("%w: vault lease expires before the requested grant ttl and is not renewable", core.ErrForbidden)
+	}
+
+	remaining := time.Until(grantExpiresAt)
+	renewed, err := c.client.RenewLease(ctx, lease.LeaseID, remaining)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	merged := mergeLeaseCredentials(lease, renewed)
+	leaseExpiresAt = time.Now().Add(merged.LeaseDuration)
+	if grantExpiresAt.After(leaseExpiresAt) {
+		return nil, time.Time{}, fmt.Errorf("%w: vault lease renewal for %q was capped before the requested grant ttl", core.ErrForbidden, lease.LeaseID)
+	}
+	return merged, leaseExpiresAt, nil
+}
+
+func mergeLeaseCredentials(current *LeaseCredentials, updated *LeaseCredentials) *LeaseCredentials {
+	if updated == nil {
+		return current
+	}
+	merged := *current
+	if updated.Username != "" {
+		merged.Username = updated.Username
+	}
+	if updated.Password != "" {
+		merged.Password = updated.Password
+	}
+	if updated.LeaseID != "" {
+		merged.LeaseID = updated.LeaseID
+	}
+	if updated.LeaseDuration > 0 {
+		merged.LeaseDuration = updated.LeaseDuration
+	}
+	merged.Renewable = updated.Renewable
+	return &merged
 }
 
 func minTime(a time.Time, b time.Time) time.Time {

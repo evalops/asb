@@ -25,7 +25,18 @@ func TestHTTPClient_GenerateCredentialsAndRevokeLease(t *testing.T) {
 			_, _ = w.Write([]byte(`{
 				"lease_id":"database/creds/analytics_ro/123",
 				"lease_duration":600,
+				"renewable":true,
 				"data":{"username":"dyn-user","password":"dyn-pass"}
+			}`))
+		case "/v1/sys/leases/renew":
+			body, _ := io.ReadAll(r.Body)
+			if string(body) != `{"increment":1800,"lease_id":"database/creds/analytics_ro/123"}` {
+				t.Fatalf("renew body = %s, want lease renew payload", string(body))
+			}
+			_, _ = w.Write([]byte(`{
+				"lease_id":"database/creds/analytics_ro/123",
+				"lease_duration":1800,
+				"renewable":true
 			}`))
 		case "/v1/sys/leases/revoke":
 			body, _ := io.ReadAll(r.Body)
@@ -50,6 +61,13 @@ func TestHTTPClient_GenerateCredentialsAndRevokeLease(t *testing.T) {
 	}
 	if lease.Username != "dyn-user" || lease.LeaseID != "database/creds/analytics_ro/123" {
 		t.Fatalf("lease = %#v, want parsed vault lease", lease)
+	}
+	renewed, err := client.RenewLease(context.Background(), lease.LeaseID, 30*time.Minute)
+	if err != nil {
+		t.Fatalf("RenewLease() error = %v", err)
+	}
+	if renewed.LeaseDuration != 30*time.Minute {
+		t.Fatalf("renewed lease = %#v, want renewed duration", renewed)
 	}
 	if err := client.RevokeLease(context.Background(), lease.LeaseID); err != nil {
 		t.Fatalf("RevokeLease() error = %v", err)

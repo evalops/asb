@@ -21,6 +21,7 @@ func TestConnector_IssueAndRevokeDynamicCredentials(t *testing.T) {
 			Password:      "secret:/?#[]@",
 			LeaseID:       "database/creds/analytics_ro/123",
 			LeaseDuration: 10 * time.Minute,
+			Renewable:     true,
 		},
 	}
 	connector, err := vaultdb.NewConnector(vaultdb.Config{
@@ -53,6 +54,9 @@ func TestConnector_IssueAndRevokeDynamicCredentials(t *testing.T) {
 	}
 	if issued.SecretData["dsn"] == "" || issued.Metadata["lease_id"] == "" {
 		t.Fatalf("issued artifact = %#v, want dsn and lease id", issued)
+	}
+	if issued.Metadata["lease_expires_at"] == "" {
+		t.Fatalf("issued artifact = %#v, want lease expiry metadata", issued)
 	}
 	if strings.Contains(issued.SecretData["dsn"], "secret:/?#[]@") {
 		t.Fatalf("dsn = %q, want escaped credentials", issued.SecretData["dsn"])
@@ -114,6 +118,7 @@ func TestConnectorHonorsConfiguredRoleSuffixes(t *testing.T) {
 				Password:      "dyn-pass",
 				LeaseID:       "lease-1",
 				LeaseDuration: time.Minute,
+				Renewable:     true,
 			},
 		},
 		RoleDSNs: map[string]string{
@@ -197,13 +202,110 @@ func TestConnectorIssueEscapesUserinfoWithPercentEncoding(t *testing.T) {
 	}
 }
 
+func TestConnector_IssueRenewsLeaseToMatchGrantTTL(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeVaultClient{
+		lease: &vaultdb.LeaseCredentials{
+			Username:      "dyn-user",
+			Password:      "dyn-pass",
+			LeaseID:       "database/creds/analytics_ro/123",
+			LeaseDuration: time.Minute,
+			Renewable:     true,
+		},
+		renewedLease: &vaultdb.LeaseCredentials{
+			LeaseID:       "database/creds/analytics_ro/123",
+			LeaseDuration: 10 * time.Minute,
+			Renewable:     true,
+		},
+	}
+	connector, err := vaultdb.NewConnector(vaultdb.Config{
+		Client: client,
+		RoleDSNs: map[string]string{
+			"analytics_ro": "postgres://{{username}}:{{password}}@db.internal:5432/analytics?sslmode=require",
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewConnector() error = %v", err)
+	}
+
+	issued, err := connector.Issue(context.Background(), core.IssueRequest{
+		Session: &core.Session{ID: "sess_db", TenantID: "t_acme"},
+		Grant: &core.Grant{
+			ID:           "gr_db",
+			DeliveryMode: core.DeliveryModeWrappedSecret,
+			ExpiresAt:    time.Now().Add(5 * time.Minute),
+		},
+		Resource: core.ResourceDescriptor{
+			Kind: core.ResourceKindDBRole,
+			Name: "analytics_ro",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+	if client.renewedLeaseID != "database/creds/analytics_ro/123" {
+		t.Fatalf("renewed lease = %q, want expected lease", client.renewedLeaseID)
+	}
+	if got := time.Until(issued.ExpiresAt); got < 4*time.Minute {
+		t.Fatalf("artifact ttl = %s, want renewed lease to cover grant", got)
+	}
+}
+
+func TestConnector_IssueFailsWhenGrantTTLExceedsNonRenewableLease(t *testing.T) {
+	t.Parallel()
+
+	connector, err := vaultdb.NewConnector(vaultdb.Config{
+		Client: &fakeVaultClient{
+			lease: &vaultdb.LeaseCredentials{
+				Username:      "dyn-user",
+				Password:      "dyn-pass",
+				LeaseID:       "database/creds/analytics_ro/123",
+				LeaseDuration: time.Minute,
+			},
+		},
+		RoleDSNs: map[string]string{
+			"analytics_ro": "postgres://{{username}}:{{password}}@db.internal:5432/analytics?sslmode=require",
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewConnector() error = %v", err)
+	}
+
+	_, err = connector.Issue(context.Background(), core.IssueRequest{
+		Session: &core.Session{ID: "sess_db", TenantID: "t_acme"},
+		Grant: &core.Grant{
+			ID:           "gr_db",
+			DeliveryMode: core.DeliveryModeWrappedSecret,
+			ExpiresAt:    time.Now().Add(5 * time.Minute),
+		},
+		Resource: core.ResourceDescriptor{
+			Kind: core.ResourceKindDBRole,
+			Name: "analytics_ro",
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "not renewable") {
+		t.Fatalf("Issue() error = %v, want renewal failure", err)
+	}
+}
+
 type fakeVaultClient struct {
 	lease          *vaultdb.LeaseCredentials
+	renewedLease   *vaultdb.LeaseCredentials
+	renewedLeaseID string
 	revokedLeaseID string
 }
 
 func (f *fakeVaultClient) GenerateCredentials(context.Context, string) (*vaultdb.LeaseCredentials, error) {
 	return f.lease, nil
+}
+
+func (f *fakeVaultClient) RenewLease(_ context.Context, leaseID string, _ time.Duration) (*vaultdb.LeaseCredentials, error) {
+	f.renewedLeaseID = leaseID
+	if f.renewedLease == nil {
+		return f.lease, nil
+	}
+	return f.renewedLease, nil
 }
 
 func (f *fakeVaultClient) RevokeLease(_ context.Context, leaseID string) error {
