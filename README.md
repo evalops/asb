@@ -222,16 +222,22 @@ Flags: `-interval` (default 30s), `-limit` (default 100 per pass), `-once` (sing
 
 ### Required for API startup
 
+Configure at least one attestation verifier:
+
 | Variable | Purpose |
 |----------|---------|
 | `ASB_K8S_ISSUER` | Expected issuer in Kubernetes SA JWTs |
-| `ASB_K8S_PUBLIC_KEY_FILE` | Public key for JWT verification |
+| `ASB_K8S_PUBLIC_KEY_FILE` | Public key for Kubernetes SA JWT verification |
+| `ASB_OIDC_ISSUER` | Expected issuer for generic OIDC workload JWTs |
+| `ASB_OIDC_PUBLIC_KEY_FILE` | Public key for OIDC workload JWT verification |
 
 ### Optional
 
 | Variable | Purpose |
 |----------|---------|
 | `ASB_K8S_AUDIENCE` | Expected audience claim |
+| `ASB_OIDC_AUDIENCE` | Expected audience claim for OIDC workload JWTs (default `asb-control-plane`) |
+| `ASB_OIDC_ALLOWED_SUBJECT_PREFIXES` | Comma-separated allowed OIDC subject prefixes |
 | `ASB_ADDR` | Listen address (default `:8080`) |
 | `ASB_DEV_TENANT_ID` | Tenant ID for local development |
 | `ASB_POSTGRES_DSN` | Enables Postgres repository |
@@ -294,6 +300,16 @@ make run-worker    # start the cleanup worker
 export ASB_K8S_ISSUER="https://cluster.example"
 export ASB_K8S_PUBLIC_KEY_FILE="./dev/keys/k8s-sa.pub"
 export ASB_GITHUB_TOKEN="ghp_..."
+make run-api
+```
+
+For generic OIDC workload identity, configure the OIDC verifier instead:
+
+```bash
+export ASB_OIDC_ISSUER="https://token.actions.githubusercontent.com"
+export ASB_OIDC_PUBLIC_KEY_FILE="./dev/keys/github-actions.pub"
+export ASB_OIDC_AUDIENCE="asb-control-plane"
+export ASB_OIDC_ALLOWED_SUBJECT_PREFIXES="repo:evalops/"
 make run-api
 ```
 

@@ -89,12 +89,14 @@ type WorkloadIdentityType string
 
 const (
 	WorkloadIdentityTypeK8SSA WorkloadIdentityType = "k8s_sa"
+	WorkloadIdentityTypeOIDC  WorkloadIdentityType = "oidc"
 )
 
 type AttestationKind string
 
 const (
 	AttestationKindK8SServiceAccountJWT AttestationKind = "k8s_sa_jwt"
+	AttestationKindOIDCJWT              AttestationKind = "oidc_jwt"
 )
 
 type ResourceKind string
