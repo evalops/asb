@@ -192,41 +192,33 @@ func NewServiceRuntime(ctx context.Context, logger *slog.Logger, options ...Serv
 		})
 	}
 
-	if vaultAddr := os.Getenv("ASB_VAULT_ADDR"); vaultAddr != "" {
-		role := getenv("ASB_VAULT_ROLE", "analytics_ro")
-		dsnTemplate := os.Getenv("ASB_VAULT_DSN_TEMPLATE")
-		if dsnTemplate != "" {
-			vaultClient := vaultdb.NewHTTPClient(vaultdb.HTTPClientConfig{
-				BaseURL:   vaultAddr,
-				Token:     os.Getenv("ASB_VAULT_TOKEN"),
-				Namespace: os.Getenv("ASB_VAULT_NAMESPACE"),
-			})
-			connectorOptions = append(connectorOptions, resolver.WithVaultDB(vaultdb.NewConnector(vaultdb.Config{
-				Client: vaultClient,
-				RoleDSNs: map[string]string{
-					role: dsnTemplate,
-				},
-			})))
-			mustRegisterToolAndPolicy(ctx, logger, tools, engine, tenantID, core.Tool{
-				TenantID:             tenantID,
-				Tool:                 "db",
-				ManifestHash:         "sha256:dev-db",
-				RuntimeClass:         core.RuntimeClassSidecar,
-				AllowedDeliveryModes: []core.DeliveryMode{core.DeliveryModeWrappedSecret},
-				AllowedCapabilities:  []string{"db.read"},
-				TrustTags:            []string{"trusted", "db"},
-			}, core.Policy{
-				TenantID:             tenantID,
-				Capability:           "db.read",
-				ResourceKind:         core.ResourceKindDBRole,
-				AllowedDeliveryModes: []core.DeliveryMode{core.DeliveryModeWrappedSecret},
-				DefaultTTL:           10 * time.Minute,
-				MaxTTL:               30 * time.Minute,
-				ApprovalMode:         core.ApprovalModeNone,
-				RequiredToolTags:     []string{"trusted", "db"},
-				Condition:            `true`,
-			})
-		}
+	vaultConnector, err := newVaultDBConnector()
+	if err != nil {
+		cleanupRuntime()
+		cleanupRepository()
+		return nil, err
+	}
+	if vaultConnector != nil {
+		connectorOptions = append(connectorOptions, resolver.WithVaultDB(vaultConnector))
+		mustRegisterToolAndPolicy(ctx, logger, tools, engine, tenantID, core.Tool{
+			TenantID:             tenantID,
+			Tool:                 "db",
+			ManifestHash:         "sha256:dev-db",
+			RuntimeClass:         core.RuntimeClassSidecar,
+			AllowedDeliveryModes: []core.DeliveryMode{core.DeliveryModeWrappedSecret},
+			AllowedCapabilities:  []string{"db.read"},
+			TrustTags:            []string{"trusted", "db"},
+		}, core.Policy{
+			TenantID:             tenantID,
+			Capability:           "db.read",
+			ResourceKind:         core.ResourceKindDBRole,
+			AllowedDeliveryModes: []core.DeliveryMode{core.DeliveryModeWrappedSecret},
+			DefaultTTL:           10 * time.Minute,
+			MaxTTL:               30 * time.Minute,
+			ApprovalMode:         core.ApprovalModeNone,
+			RequiredToolTags:     []string{"trusted", "db"},
+			Condition:            `true`,
+		})
 	}
 
 	delegationValidator, err := newDelegationValidator()
@@ -453,6 +445,10 @@ func newDelegationValidator() (core.DelegationValidator, error) {
 
 func newGitHubProxyExecutor() (core.GitHubProxyExecutor, error) {
 	var tokenSource githubconnector.RepoTokenSource
+	var staticTokenSource githubconnector.RepoTokenSource
+	if token := os.Getenv("ASB_GITHUB_TOKEN"); token != "" {
+		staticTokenSource = githubconnector.StaticTokenSource(token)
+	}
 
 	if appIDRaw := os.Getenv("ASB_GITHUB_APP_ID"); appIDRaw != "" && os.Getenv("ASB_GITHUB_APP_PRIVATE_KEY_FILE") != "" {
 		appID, err := strconv.ParseInt(appIDRaw, 10, 64)
@@ -478,8 +474,9 @@ func newGitHubProxyExecutor() (core.GitHubProxyExecutor, error) {
 		if err != nil {
 			return nil, err
 		}
-	} else if token := os.Getenv("ASB_GITHUB_TOKEN"); token != "" {
-		tokenSource = githubconnector.StaticTokenSource(token)
+		tokenSource = githubconnector.FallbackTokenSource(tokenSource, staticTokenSource)
+	} else if staticTokenSource != nil {
+		tokenSource = staticTokenSource
 	}
 
 	if tokenSource == nil {
@@ -675,6 +672,46 @@ func splitCommaSeparatedEnv(key string) []string {
 		return nil
 	}
 	return values
+}
+
+func csvEnvOr(key string, fallback []string) []string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return append([]string(nil), fallback...)
+	}
+	parts := strings.Split(value, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			values = append(values, trimmed)
+		}
+	}
+	if len(values) == 0 {
+		return append([]string(nil), fallback...)
+	}
+	return values
+}
+
+func newVaultDBConnector() (*vaultdb.Connector, error) {
+	vaultAddr := strings.TrimSpace(os.Getenv("ASB_VAULT_ADDR"))
+	dsnTemplate := strings.TrimSpace(os.Getenv("ASB_VAULT_DSN_TEMPLATE"))
+	if vaultAddr == "" || dsnTemplate == "" {
+		return nil, nil
+	}
+
+	role := getenv("ASB_VAULT_ROLE", "analytics_ro")
+	return vaultdb.NewConnector(vaultdb.Config{
+		AllowedRoleSuffixes: csvEnvOr("ASB_VAULT_ALLOWED_ROLE_SUFFIXES", []string{"_ro"}),
+		Client: vaultdb.NewHTTPClient(vaultdb.HTTPClientConfig{
+			BaseURL:   vaultAddr,
+			Token:     os.Getenv("ASB_VAULT_TOKEN"),
+			Namespace: os.Getenv("ASB_VAULT_NAMESPACE"),
+		}),
+		RoleDSNs: map[string]string{
+			role: dsnTemplate,
+		},
+	})
 }
 
 func mustRegisterToolAndPolicy(ctx context.Context, logger *slog.Logger, tools *toolregistry.Registry, engine *policy.Engine, tenantID string, tool core.Tool, pol core.Policy) {

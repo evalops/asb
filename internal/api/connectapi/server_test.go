@@ -80,32 +80,75 @@ func TestServer_CreateSessionAndExecuteProxy(t *testing.T) {
 	}
 }
 
-func TestServer_MapsCoreErrorsToConnectCodes(t *testing.T) {
+func TestServer_ExecuteProxyUnavailableMapsToConnectUnavailable(t *testing.T) {
 	t.Parallel()
 
-	svc := &stubService{
-		createSession: func(context.Context, *core.CreateSessionRequest) (*core.CreateSessionResponse, error) {
-			return nil, core.ErrInvalidRequest
-		},
-	}
-
-	path, handler := connectapi.NewHandler(svc)
 	mux := http.NewServeMux()
+	path, handler := connectapi.NewHandler(&stubService{
+		executeGitHubProxy: func(context.Context, *core.ExecuteGitHubProxyRequest) (*core.ExecuteGitHubProxyResponse, error) {
+			return nil, core.ErrUnavailable
+		},
+	})
 	mux.Handle(path, handler)
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
 	client := asbv1connect.NewBrokerServiceClient(server.Client(), server.URL)
-	_, err := client.CreateSession(context.Background(), connect.NewRequest(&asbv1.CreateSessionRequest{}))
-	if err == nil {
-		t.Fatal("CreateSession() error = nil, want non-nil")
-	}
+	_, err := client.ExecuteGitHubProxy(context.Background(), connect.NewRequest(&asbv1.ExecuteGitHubProxyRequest{
+		ProxyHandle: "ph_456",
+		Operation:   "repository_metadata",
+	}))
 	var connectErr *connect.Error
 	if !errors.As(err, &connectErr) {
-		t.Fatalf("error = %T, want *connect.Error", err)
+		t.Fatalf("error = %v, want connect error", err)
 	}
-	if connectErr.Code() != connect.CodeInvalidArgument {
-		t.Fatalf("code = %v, want %v", connectErr.Code(), connect.CodeInvalidArgument)
+	if connectErr.Code() != connect.CodeUnavailable {
+		t.Fatalf("connect code = %v, want %v", connectErr.Code(), connect.CodeUnavailable)
+	}
+}
+
+func TestServer_MapsCoreErrorsToConnectCodes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want connect.Code
+	}{
+		{name: "invalid request", err: core.ErrInvalidRequest, want: connect.CodeInvalidArgument},
+		{name: "unimplemented delivery mode", err: core.ErrDeliveryModeNotImplemented, want: connect.CodeUnimplemented},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			svc := &stubService{
+				createSession: func(context.Context, *core.CreateSessionRequest) (*core.CreateSessionResponse, error) {
+					return nil, tt.err
+				},
+			}
+
+			path, handler := connectapi.NewHandler(svc)
+			mux := http.NewServeMux()
+			mux.Handle(path, handler)
+			server := httptest.NewServer(mux)
+			defer server.Close()
+
+			client := asbv1connect.NewBrokerServiceClient(server.Client(), server.URL)
+			_, err := client.CreateSession(context.Background(), connect.NewRequest(&asbv1.CreateSessionRequest{}))
+			if err == nil {
+				t.Fatal("CreateSession() error = nil, want non-nil")
+			}
+			var connectErr *connect.Error
+			if !errors.As(err, &connectErr) {
+				t.Fatalf("error = %T, want *connect.Error", err)
+			}
+			if connectErr.Code() != tt.want {
+				t.Fatalf("code = %v, want %v", connectErr.Code(), tt.want)
+			}
+		})
 	}
 }
 

@@ -138,7 +138,7 @@ A static resolver routes capability and resource kind to the appropriate connect
 
 - **`proxy`**: the broker executes the downstream call and the agent only receives an opaque handle. The agent never sees the credential. Budget-enforced per handle.
 - **`wrapped_secret`**: the broker returns a short-lived, single-use artifact reference for trusted runtimes. The artifact is bound to recipient identity (session, key, origin, tab).
-- **`minted_token`** *(planned, not runtime-enabled)*: direct short-lived token issuance for cases where proxy is impractical. Modeled in the domain types but not wired into delivery adapters.
+- **`minted_token`** *(planned, not runtime-enabled)*: direct short-lived token issuance for cases where proxy is impractical. Modeled in the domain types but currently rejected with an explicit not-implemented error until runtime support lands.
 
 ## Storage
 
@@ -268,6 +268,7 @@ Configure at least one attestation verifier:
 | `ASB_VAULT_TOKEN` | Vault authentication token |
 | `ASB_VAULT_NAMESPACE` | Vault namespace |
 | `ASB_VAULT_ROLE` | Vault DB role name |
+| `ASB_VAULT_ALLOWED_ROLE_SUFFIXES` | Comma-separated allowed Vault DB role suffixes (default `_ro`) |
 | `ASB_VAULT_DSN_TEMPLATE` | DSN template for rendered credentials |
 | `ASB_BROWSER_ORIGIN` | Allowed browser origin (demo) |
 | `ASB_BROWSER_USERNAME` | Browser credential username (demo) |

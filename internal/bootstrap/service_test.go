@@ -125,3 +125,46 @@ func writeEd25519PublicKeyFile(t *testing.T, dir, name string) string {
 	}
 	return path
 }
+
+func TestNewVaultDBConnectorUsesConfiguredRoleSuffixes(t *testing.T) {
+	t.Setenv("ASB_VAULT_ADDR", "https://vault.internal")
+	t.Setenv("ASB_VAULT_DSN_TEMPLATE", "postgres://{{username}}:{{password}}@db.internal/app")
+	t.Setenv("ASB_VAULT_ROLE", "analytics_readonly")
+	t.Setenv("ASB_VAULT_ALLOWED_ROLE_SUFFIXES", "_readonly,_reader")
+
+	connector, err := newVaultDBConnector()
+	if err != nil {
+		t.Fatalf("newVaultDBConnector() error = %v", err)
+	}
+	if connector == nil {
+		t.Fatal("newVaultDBConnector() = nil, want connector")
+	}
+}
+
+func TestNewVaultDBConnectorFailsForInvalidTemplates(t *testing.T) {
+	t.Setenv("ASB_VAULT_ADDR", "https://vault.internal")
+	t.Setenv("ASB_VAULT_DSN_TEMPLATE", "postgres://db.internal/app")
+
+	connector, err := newVaultDBConnector()
+	if err == nil || !strings.Contains(err.Error(), "placeholders") {
+		t.Fatalf("newVaultDBConnector() error = %v, want placeholder validation error", err)
+	}
+	if connector != nil {
+		t.Fatalf("newVaultDBConnector() = %#v, want nil", connector)
+	}
+}
+
+func TestNewVaultDBConnectorFailsForDisallowedRole(t *testing.T) {
+	t.Setenv("ASB_VAULT_ADDR", "https://vault.internal")
+	t.Setenv("ASB_VAULT_DSN_TEMPLATE", "postgres://{{username}}:{{password}}@db.internal/app")
+	t.Setenv("ASB_VAULT_ROLE", "analytics_readonly")
+	t.Setenv("ASB_VAULT_ALLOWED_ROLE_SUFFIXES", "_ro")
+
+	connector, err := newVaultDBConnector()
+	if err == nil || !strings.Contains(err.Error(), "allowed suffixes") {
+		t.Fatalf("newVaultDBConnector() error = %v, want allowed suffix validation error", err)
+	}
+	if connector != nil {
+		t.Fatalf("newVaultDBConnector() = %#v, want nil", connector)
+	}
+}

@@ -163,6 +163,26 @@ func TestServer_RequestTimeoutReturnsGatewayTimeout(t *testing.T) {
 	}
 }
 
+func TestServer_MapsDeliveryModeNotImplementedToNotImplemented(t *testing.T) {
+	t.Parallel()
+
+	svc := &stubService{
+		createSession: func(context.Context, *core.CreateSessionRequest) (*core.CreateSessionResponse, error) {
+			return nil, core.ErrDeliveryModeNotImplemented
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/sessions", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	httpapi.NewServer(svc).ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusNotImplemented {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusNotImplemented)
+	}
+}
+
 func TestServer_ServiceContextRemainsAliveAfterDecode(t *testing.T) {
 	t.Parallel()
 
@@ -378,6 +398,30 @@ func TestServer_RegisterBrowserRelayAndUnwrap(t *testing.T) {
 
 	if unwrapRecorder.Code != http.StatusOK {
 		t.Fatalf("unwrap status = %d, want %d", unwrapRecorder.Code, http.StatusOK)
+	}
+}
+
+func TestServer_ExecuteGitHubProxyRateLimited(t *testing.T) {
+	t.Parallel()
+
+	svc := &stubService{
+		executeGitHubProxy: func(context.Context, *core.ExecuteGitHubProxyRequest) (*core.ExecuteGitHubProxyResponse, error) {
+			return nil, core.ErrRateLimited
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/proxy/github/rest", bytes.NewBufferString(`{
+		"proxy_handle":"ph_456",
+		"operation":"repository_metadata",
+		"params":{}
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	httpapi.NewServer(svc).ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusTooManyRequests)
 	}
 }
 

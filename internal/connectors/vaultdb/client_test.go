@@ -5,9 +5,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/evalops/asb/internal/connectors/vaultdb"
+	"github.com/evalops/service-runtime/resilience"
 )
 
 func TestHTTPClient_GenerateCredentialsAndRevokeLease(t *testing.T) {
@@ -50,5 +53,71 @@ func TestHTTPClient_GenerateCredentialsAndRevokeLease(t *testing.T) {
 	}
 	if err := client.RevokeLease(context.Background(), lease.LeaseID); err != nil {
 		t.Fatalf("RevokeLease() error = %v", err)
+	}
+}
+
+func TestHTTPClient_RevokeLeaseRetriesTransientFailures(t *testing.T) {
+	t.Parallel()
+
+	var attempts atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/sys/leases/revoke" {
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+		attempt := attempts.Add(1)
+		if attempt < 3 {
+			http.Error(w, "vault warming up", http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	client := vaultdb.NewHTTPClient(vaultdb.HTTPClientConfig{
+		BaseURL: server.URL,
+		Token:   "vault-token",
+		Client:  server.Client(),
+		RevokeRetry: resilience.RetryConfig{
+			MaxAttempts:  4,
+			InitialDelay: time.Millisecond,
+			MaxDelay:     time.Millisecond,
+		},
+	})
+	if err := client.RevokeLease(context.Background(), "lease-123"); err != nil {
+		t.Fatalf("RevokeLease() error = %v", err)
+	}
+	if attempts.Load() != 3 {
+		t.Fatalf("revoke attempts = %d, want 3", attempts.Load())
+	}
+}
+
+func TestHTTPClient_RevokeLeaseDoesNotRetryPermanentFailures(t *testing.T) {
+	t.Parallel()
+
+	var attempts atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/sys/leases/revoke" {
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+		attempts.Add(1)
+		http.Error(w, "forbidden", http.StatusForbidden)
+	}))
+	defer server.Close()
+
+	client := vaultdb.NewHTTPClient(vaultdb.HTTPClientConfig{
+		BaseURL: server.URL,
+		Token:   "vault-token",
+		Client:  server.Client(),
+		RevokeRetry: resilience.RetryConfig{
+			MaxAttempts:  4,
+			InitialDelay: time.Millisecond,
+			MaxDelay:     time.Millisecond,
+		},
+	})
+	if err := client.RevokeLease(context.Background(), "lease-123"); err == nil {
+		t.Fatal("RevokeLease() error = nil, want permanent error")
+	}
+	if attempts.Load() != 1 {
+		t.Fatalf("revoke attempts = %d, want 1", attempts.Load())
 	}
 }
