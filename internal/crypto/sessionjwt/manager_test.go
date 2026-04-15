@@ -42,7 +42,7 @@ func TestManagerSignAddsStandardClaims(t *testing.T) {
 
 	parsed, err := jwt.ParseWithClaims(raw, &claims{}, func(token *jwt.Token) (any, error) {
 		return manager.publicKey, nil
-	})
+	}, jwt.WithTimeFunc(func() time.Time { return now }))
 	if err != nil {
 		t.Fatalf("ParseWithClaims() error = %v", err)
 	}
