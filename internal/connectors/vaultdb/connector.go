@@ -3,6 +3,7 @@ package vaultdb
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"text/template"
 	"time"
@@ -23,20 +24,61 @@ type Client interface {
 }
 
 type Config struct {
-	Client   Client
-	RoleDSNs map[string]string
+	AllowedRoleSuffixes []string
+	Client              Client
+	RoleDSNs            map[string]string
 }
 
 type Connector struct {
-	client   Client
-	roleDSNs map[string]string
+	allowedRoleSuffixes []string
+	client              Client
+	roleDSNs            map[string]string
 }
 
-func NewConnector(cfg Config) *Connector {
-	return &Connector{
-		client:   cfg.Client,
-		roleDSNs: cfg.RoleDSNs,
+func NewConnector(cfg Config) (*Connector, error) {
+	roleDSNs, err := normalizeRoleDSNs(cfg.RoleDSNs)
+	if err != nil {
+		return nil, err
 	}
+	return &Connector{
+		allowedRoleSuffixes: normalizeRoleSuffixes(cfg.AllowedRoleSuffixes),
+		client:              cfg.Client,
+		roleDSNs:            roleDSNs,
+	}, nil
+}
+
+func normalizeRoleDSNs(roleDSNs map[string]string) (map[string]string, error) {
+	if len(roleDSNs) == 0 {
+		return map[string]string{}, nil
+	}
+
+	normalized := make(map[string]string, len(roleDSNs))
+	for role, pattern := range roleDSNs {
+		renderPattern, err := normalizeDSNTemplate(pattern)
+		if err != nil {
+			return nil, fmt.Errorf("%w: role %q: %v", core.ErrInvalidRequest, role, err)
+		}
+		normalized[role] = renderPattern
+	}
+	return normalized, nil
+}
+
+func normalizeRoleSuffixes(suffixes []string) []string {
+	if len(suffixes) == 0 {
+		return []string{"_ro"}
+	}
+
+	normalized := make([]string, 0, len(suffixes))
+	for _, suffix := range suffixes {
+		trimmed := strings.TrimSpace(suffix)
+		if trimmed != "" {
+			normalized = append(normalized, trimmed)
+		}
+	}
+	if len(normalized) == 0 {
+		return []string{"_ro"}
+	}
+	return normalized
 }
 
 func (c *Connector) Kind() string {
@@ -48,16 +90,7 @@ func (c *Connector) ValidateResource(_ context.Context, req core.ValidateResourc
 	if err != nil {
 		return err
 	}
-	if resource.Kind != core.ResourceKindDBRole {
-		return fmt.Errorf("%w: vault db connector only supports db roles", core.ErrInvalidRequest)
-	}
-	if !strings.HasSuffix(resource.Name, "_ro") {
-		return fmt.Errorf("%w: v1 only allows read-only db roles", core.ErrForbidden)
-	}
-	if _, ok := c.roleDSNs[resource.Name]; !ok {
-		return fmt.Errorf("%w: no DSN template configured for %q", core.ErrNotFound, resource.Name)
-	}
-	return nil
+	return c.validateRole(resource.Kind, resource.Name)
 }
 
 func (c *Connector) Issue(ctx context.Context, req core.IssueRequest) (*core.IssuedArtifact, error) {
@@ -69,6 +102,9 @@ func (c *Connector) Issue(ctx context.Context, req core.IssueRequest) (*core.Iss
 	}
 	if req.Grant.DeliveryMode != core.DeliveryModeWrappedSecret {
 		return nil, fmt.Errorf("%w: vault db connector only supports wrapped secret delivery", core.ErrInvalidRequest)
+	}
+	if err := c.validateRole(req.Resource.Kind, req.Resource.Name); err != nil {
+		return nil, err
 	}
 
 	lease, err := c.client.GenerateCredentials(ctx, req.Resource.Name)
@@ -107,17 +143,50 @@ func (c *Connector) Revoke(ctx context.Context, req core.RevokeRequest) error {
 	return c.client.RevokeLease(ctx, leaseID)
 }
 
-func renderDSN(pattern string, lease *LeaseCredentials) (string, error) {
-	pattern = strings.ReplaceAll(pattern, "{{username}}", "{{.username}}")
-	pattern = strings.ReplaceAll(pattern, "{{password}}", "{{.password}}")
-	tpl, err := template.New("dsn").Parse(pattern)
+func (c *Connector) validateRole(kind core.ResourceKind, role string) error {
+	if kind != core.ResourceKindDBRole {
+		return fmt.Errorf("%w: vault db connector only supports db roles", core.ErrInvalidRequest)
+	}
+	if !c.allowedRole(role) {
+		return fmt.Errorf("%w: db role %q must match one of the allowed suffixes %v", core.ErrForbidden, role, c.allowedRoleSuffixes)
+	}
+	if _, ok := c.roleDSNs[role]; !ok {
+		return fmt.Errorf("%w: no DSN template configured for %q", core.ErrNotFound, role)
+	}
+	return nil
+}
+
+func (c *Connector) allowedRole(role string) bool {
+	for _, suffix := range c.allowedRoleSuffixes {
+		if strings.HasSuffix(role, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeDSNTemplate(pattern string) (string, error) {
+	trimmed := strings.TrimSpace(pattern)
+	if !strings.Contains(trimmed, "{{username}}") || !strings.Contains(trimmed, "{{password}}") {
+		return "", fmt.Errorf("dsn template must include {{username}} and {{password}} placeholders")
+	}
+	trimmed = strings.ReplaceAll(trimmed, "{{username}}", "{{.username}}")
+	trimmed = strings.ReplaceAll(trimmed, "{{password}}", "{{.password}}")
+	if _, err := template.New("dsn").Parse(trimmed); err != nil {
+		return "", fmt.Errorf("parse dsn template: %v", err)
+	}
+	return trimmed, nil
+}
+
+func renderDSN(renderPattern string, lease *LeaseCredentials) (string, error) {
+	tpl, err := template.New("dsn").Parse(renderPattern)
 	if err != nil {
 		return "", fmt.Errorf("%w: parse dsn template: %v", core.ErrInvalidRequest, err)
 	}
 	var builder strings.Builder
 	if err := tpl.Execute(&builder, map[string]string{
-		"username": lease.Username,
-		"password": lease.Password,
+		"username": url.QueryEscape(lease.Username),
+		"password": url.QueryEscape(lease.Password),
 	}); err != nil {
 		return "", fmt.Errorf("%w: render dsn template: %v", core.ErrInvalidRequest, err)
 	}

@@ -66,3 +66,31 @@ func TestNewApprovalNotifierConfigured(t *testing.T) {
 		t.Fatal("newApprovalNotifier() = nil, want configured notifier")
 	}
 }
+
+func TestNewVaultDBConnectorUsesConfiguredRoleSuffixes(t *testing.T) {
+	t.Setenv("ASB_VAULT_ADDR", "https://vault.internal")
+	t.Setenv("ASB_VAULT_DSN_TEMPLATE", "postgres://{{username}}:{{password}}@db.internal/app")
+	t.Setenv("ASB_VAULT_ROLE", "analytics_readonly")
+	t.Setenv("ASB_VAULT_ALLOWED_ROLE_SUFFIXES", "_readonly,_reader")
+
+	connector, err := newVaultDBConnector()
+	if err != nil {
+		t.Fatalf("newVaultDBConnector() error = %v", err)
+	}
+	if connector == nil {
+		t.Fatal("newVaultDBConnector() = nil, want connector")
+	}
+}
+
+func TestNewVaultDBConnectorFailsForInvalidTemplates(t *testing.T) {
+	t.Setenv("ASB_VAULT_ADDR", "https://vault.internal")
+	t.Setenv("ASB_VAULT_DSN_TEMPLATE", "postgres://db.internal/app")
+
+	connector, err := newVaultDBConnector()
+	if err == nil || !strings.Contains(err.Error(), "placeholders") {
+		t.Fatalf("newVaultDBConnector() error = %v, want placeholder validation error", err)
+	}
+	if connector != nil {
+		t.Fatalf("newVaultDBConnector() = %#v, want nil", connector)
+	}
+}
