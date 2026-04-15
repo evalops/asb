@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/evalops/asb/internal/authn/delegationjwt"
 	"github.com/evalops/asb/internal/core"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func TestValidator_ValidateSignedDelegation(t *testing.T) {
