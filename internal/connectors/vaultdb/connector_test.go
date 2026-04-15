@@ -255,15 +255,16 @@ func TestConnector_IssueRenewsLeaseToMatchGrantTTL(t *testing.T) {
 func TestConnector_IssueFailsWhenGrantTTLExceedsNonRenewableLease(t *testing.T) {
 	t.Parallel()
 
-	connector, err := vaultdb.NewConnector(vaultdb.Config{
-		Client: &fakeVaultClient{
-			lease: &vaultdb.LeaseCredentials{
-				Username:      "dyn-user",
-				Password:      "dyn-pass",
-				LeaseID:       "database/creds/analytics_ro/123",
-				LeaseDuration: time.Minute,
-			},
+	client := &fakeVaultClient{
+		lease: &vaultdb.LeaseCredentials{
+			Username:      "dyn-user",
+			Password:      "dyn-pass",
+			LeaseID:       "database/creds/analytics_ro/123",
+			LeaseDuration: time.Minute,
 		},
+	}
+	connector, err := vaultdb.NewConnector(vaultdb.Config{
+		Client: client,
 		RoleDSNs: map[string]string{
 			"analytics_ro": "postgres://{{username}}:{{password}}@db.internal:5432/analytics?sslmode=require",
 		},
@@ -286,6 +287,9 @@ func TestConnector_IssueFailsWhenGrantTTLExceedsNonRenewableLease(t *testing.T) 
 	})
 	if err == nil || !strings.Contains(err.Error(), "not renewable") {
 		t.Fatalf("Issue() error = %v, want renewal failure", err)
+	}
+	if client.revokedLeaseID != "database/creds/analytics_ro/123" {
+		t.Fatalf("revoked lease = %q, want failed renewal lease to be revoked", client.revokedLeaseID)
 	}
 }
 

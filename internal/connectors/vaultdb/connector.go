@@ -119,10 +119,14 @@ func (c *Connector) Issue(ctx context.Context, req core.IssueRequest) (*core.Iss
 	if err != nil {
 		return nil, err
 	}
-	lease, leaseExpiresAt, err := c.extendLeaseForGrant(ctx, lease, req.Grant.ExpiresAt)
+	extendedLease, leaseExpiresAt, err := c.extendLeaseForGrant(ctx, lease, req.Grant.ExpiresAt)
 	if err != nil {
+		if lease != nil && lease.LeaseID != "" {
+			_ = c.client.RevokeLease(ctx, lease.LeaseID)
+		}
 		return nil, err
 	}
+	lease = extendedLease
 	dsn, err := renderDSN(c.roleDSNs[req.Resource.Name], lease)
 	if err != nil {
 		return nil, err
