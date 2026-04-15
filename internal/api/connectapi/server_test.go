@@ -152,6 +152,44 @@ func TestServer_MapsCoreErrorsToConnectCodes(t *testing.T) {
 	}
 }
 
+func TestServer_CreateSessionAcceptsOIDCAttestationKind(t *testing.T) {
+	t.Parallel()
+
+	svc := &stubService{
+		createSession: func(_ context.Context, req *core.CreateSessionRequest) (*core.CreateSessionResponse, error) {
+			if req.Attestation == nil || req.Attestation.Kind != core.AttestationKindOIDCJWT {
+				t.Fatalf("unexpected attestation = %#v", req.Attestation)
+			}
+			return &core.CreateSessionResponse{
+				SessionID:    "sess_oidc",
+				SessionToken: "eyJ.oidc",
+				ExpiresAt:    time.Date(2026, 4, 15, 6, 0, 0, 0, time.UTC),
+			}, nil
+		},
+	}
+
+	path, handler := connectapi.NewHandler(svc)
+	mux := http.NewServeMux()
+	mux.Handle(path, handler)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := asbv1connect.NewBrokerServiceClient(server.Client(), server.URL)
+	resp, err := client.CreateSession(context.Background(), connect.NewRequest(&asbv1.CreateSessionRequest{
+		TenantId:    "t_acme",
+		AgentId:     "agent_ci",
+		RunId:       "run_oidc",
+		ToolContext: []string{"github"},
+		Attestation: &asbv1.Attestation{Kind: "oidc_jwt", Token: "jwt"},
+	}))
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	if resp.Msg.GetSessionId() != "sess_oidc" {
+		t.Fatalf("session_id = %q, want sess_oidc", resp.Msg.GetSessionId())
+	}
+}
+
 type stubService struct {
 	createSession        func(context.Context, *core.CreateSessionRequest) (*core.CreateSessionResponse, error)
 	requestGrant         func(context.Context, *core.RequestGrantRequest) (*core.RequestGrantResponse, error)

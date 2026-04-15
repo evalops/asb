@@ -21,6 +21,7 @@ import (
 	auditmemory "github.com/evalops/asb/internal/audit/memory"
 	"github.com/evalops/asb/internal/authn/delegationjwt"
 	"github.com/evalops/asb/internal/authn/k8s"
+	"github.com/evalops/asb/internal/authn/oidc"
 	"github.com/evalops/asb/internal/authz/policy"
 	"github.com/evalops/asb/internal/authz/toolregistry"
 	browserconnector "github.com/evalops/asb/internal/connectors/browser"
@@ -324,31 +325,90 @@ func runProbe(ctx context.Context, probe readinessProbe) ReadinessCheck {
 }
 
 func newVerifier(require bool) (core.AttestationVerifier, error) {
-	issuer := os.Getenv("ASB_K8S_ISSUER")
-	publicKeyFile := os.Getenv("ASB_K8S_PUBLIC_KEY_FILE")
-	if issuer == "" || publicKeyFile == "" {
+	verifiers := map[core.AttestationKind]core.AttestationVerifier{}
+
+	k8sIssuer := strings.TrimSpace(os.Getenv("ASB_K8S_ISSUER"))
+	k8sPublicKeyFile := strings.TrimSpace(os.Getenv("ASB_K8S_PUBLIC_KEY_FILE"))
+	switch {
+	case k8sIssuer == "" && k8sPublicKeyFile == "":
+	case k8sIssuer == "" || k8sPublicKeyFile == "":
+		return nil, fmt.Errorf("incomplete k8s verifier configuration: ASB_K8S_ISSUER and ASB_K8S_PUBLIC_KEY_FILE must both be set")
+	default:
+		publicKey, err := loadPublicKey(k8sPublicKeyFile)
+		if err != nil {
+			return nil, err
+		}
+		verifier, err := k8s.NewVerifier(k8s.Config{
+			Issuer:   k8sIssuer,
+			Audience: getenv("ASB_K8S_AUDIENCE", "asb-control-plane"),
+			Keyfunc: func(context.Context, *jwt.Token) (any, error) {
+				return publicKey, nil
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		verifiers[core.AttestationKindK8SServiceAccountJWT] = verifier
+	}
+
+	oidcIssuer := strings.TrimSpace(os.Getenv("ASB_OIDC_ISSUER"))
+	oidcPublicKeyFile := strings.TrimSpace(os.Getenv("ASB_OIDC_PUBLIC_KEY_FILE"))
+	switch {
+	case oidcIssuer == "" && oidcPublicKeyFile == "":
+	case oidcIssuer == "" || oidcPublicKeyFile == "":
+		return nil, fmt.Errorf("incomplete oidc verifier configuration: ASB_OIDC_ISSUER and ASB_OIDC_PUBLIC_KEY_FILE must both be set")
+	default:
+		publicKey, err := loadPublicKey(oidcPublicKeyFile)
+		if err != nil {
+			return nil, err
+		}
+		verifier, err := oidc.NewVerifier(oidc.Config{
+			Issuer:                 oidcIssuer,
+			Audience:               getenv("ASB_OIDC_AUDIENCE", "asb-control-plane"),
+			AllowedSubjectPrefixes: splitCommaSeparatedEnv("ASB_OIDC_ALLOWED_SUBJECT_PREFIXES"),
+			Keyfunc: func(context.Context, *jwt.Token) (any, error) {
+				return publicKey, nil
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		verifiers[core.AttestationKindOIDCJWT] = verifier
+	}
+
+	switch len(verifiers) {
+	case 0:
 		if require {
-			return nil, fmt.Errorf("missing verifier configuration: ASB_K8S_ISSUER and ASB_K8S_PUBLIC_KEY_FILE are required")
+			return nil, fmt.Errorf("missing verifier configuration: configure ASB_K8S_ISSUER/ASB_K8S_PUBLIC_KEY_FILE or ASB_OIDC_ISSUER/ASB_OIDC_PUBLIC_KEY_FILE")
 		}
 		return noopVerifier{}, nil
+	case 1:
+		for _, verifier := range verifiers {
+			return verifier, nil
+		}
 	}
-	publicKey, err := loadPublicKey(publicKeyFile)
-	if err != nil {
-		return nil, err
-	}
-	return k8s.NewVerifier(k8s.Config{
-		Issuer:   issuer,
-		Audience: getenv("ASB_K8S_AUDIENCE", "asb-control-plane"),
-		Keyfunc: func(context.Context, *jwt.Token) (any, error) {
-			return publicKey, nil
-		},
-	})
+	return multiVerifier{verifiers: verifiers}, nil
 }
 
 type noopVerifier struct{}
 
 func (noopVerifier) Verify(context.Context, *core.Attestation) (*core.WorkloadIdentity, error) {
 	return nil, fmt.Errorf("attestation verification is not configured in this process")
+}
+
+type multiVerifier struct {
+	verifiers map[core.AttestationKind]core.AttestationVerifier
+}
+
+func (v multiVerifier) Verify(ctx context.Context, in *core.Attestation) (*core.WorkloadIdentity, error) {
+	if in == nil {
+		return nil, fmt.Errorf("%w: attestation is required", core.ErrInvalidRequest)
+	}
+	verifier, ok := v.verifiers[in.Kind]
+	if !ok {
+		return nil, fmt.Errorf("%w: unsupported attestation kind %q", core.ErrInvalidRequest, in.Kind)
+	}
+	return verifier.Verify(ctx, in)
 }
 
 func newSessionTokenManager() (core.SessionTokenManager, error) {
@@ -594,6 +654,24 @@ func getenv(key string, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func splitCommaSeparatedEnv(key string) []string {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			values = append(values, trimmed)
+		}
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	return values
 }
 
 func csvEnvOr(key string, fallback []string) []string {

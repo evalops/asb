@@ -10,7 +10,6 @@ import (
 	"github.com/evalops/asb/internal/core"
 	asbv1 "github.com/evalops/asb/proto/asb/v1"
 	"github.com/evalops/asb/proto/asb/v1/asbv1connect"
-	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -233,11 +232,4 @@ func connectError(err error) error {
 		code = connect.CodeResourceExhausted
 	}
 	return connect.NewError(code, err)
-}
-
-func structFromMap(values map[string]any) (*structpb.Struct, error) {
-	if values == nil {
-		return nil, nil
-	}
-	return structpb.NewStruct(values)
 }
