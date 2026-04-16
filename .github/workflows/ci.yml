@@ -16,7 +16,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Go
-        uses: evalops/service-runtime/.github/actions/setup-go-service@cac5638c2935870453cf669e803936a80e17ac7b
+        uses: evalops/service-runtime/.github/actions/setup-go-service@51773406f815add11d5dabb201780fd16abb5b20
         with:
           go-version: "1.26.2"
           cache: true
@@ -60,7 +60,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Go
-        uses: evalops/service-runtime/.github/actions/setup-go-service@cac5638c2935870453cf669e803936a80e17ac7b
+        uses: evalops/service-runtime/.github/actions/setup-go-service@51773406f815add11d5dabb201780fd16abb5b20
         with:
           go-version: "1.26.2"
           cache: true
@@ -98,7 +98,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Go
-        uses: evalops/service-runtime/.github/actions/setup-go-service@cac5638c2935870453cf669e803936a80e17ac7b
+        uses: evalops/service-runtime/.github/actions/setup-go-service@51773406f815add11d5dabb201780fd16abb5b20
         with:
           go-version: "1.26.2"
           cache: true
@@ -114,7 +114,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Go
-        uses: evalops/service-runtime/.github/actions/setup-go-service@cac5638c2935870453cf669e803936a80e17ac7b
+        uses: evalops/service-runtime/.github/actions/setup-go-service@51773406f815add11d5dabb201780fd16abb5b20
         with:
           go-version: "1.26.2"
           cache: true
